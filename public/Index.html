@@ -133,9 +133,13 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// API and WS use the same host (handles both localhost dev and deployed server)
-const API      = location.origin;
-const WS_URL   = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
+// Auto-detect API host:
+// - Local: player is on :7878, API is on :3000
+// - Render/production: everything is on same host/port
+const IS_LOCAL  = location.port === '7878';
+const API_HOST  = IS_LOCAL ? (location.hostname + ':3000') : location.host;
+const API       = location.protocol + '//' + API_HOST;
+const WS_URL    = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + API_HOST;
 
 let S = { roomName:'', roomPassword:'', uid:'', playerName:'', slot:null };
 
