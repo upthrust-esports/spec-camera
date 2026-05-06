@@ -133,10 +133,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// Player page may be on port 7878 but API/WS are always on port 3000
-const API_HOST = location.hostname + ':3000';
-const API      = location.protocol + '//' + API_HOST;
-const WS_URL   = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + API_HOST;
+// API and WS use the same host (handles both localhost dev and deployed server)
+const API      = location.origin;
+const WS_URL   = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
 
 let S = { roomName:'', roomPassword:'', uid:'', playerName:'', slot:null };
 
