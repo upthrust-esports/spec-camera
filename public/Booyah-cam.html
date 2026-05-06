@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Booyah Cam</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:1280px;height:720px;overflow:hidden;background:#000;}
+
+  /* ── Waiting state ── */
+  #waiting{
+    position:fixed;inset:0;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;
+    background:#0a0d14;z-index:100;
+    font-family:'Rajdhani',sans-serif;color:#c8952a;font-size:13px;letter-spacing:3px;
+  }
+  .w-ring{
+    width:36px;height:36px;
+    border:2px solid rgba(255, 255, 255, 0.2);
+    border-top-color:#000000;
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+  }
+
+  /* ── Stage ── */
+  #stage{
+    display:none;
+    position:relative;
+    width:1280px;height:720px;
+    background:#0a0d14;
+  }
+
+  /* ── Outer gold border frame ── */
+  #stage::before{
+    content:'';
+    position:absolute;
+    inset:6px;
+    border:2px solid #c8952a;
+    pointer-events:none;
+    z-index:20;
+  }
+
+  /* ── Top banner ── */
+  .top-banner{
+    position:absolute;top:6px;left:50%;transform:translateX(-50%);
+    z-index:30;
+    background:linear-gradient(90deg,transparent,#0a0d14 15%,#0a0d14 85%,transparent);
+    padding:0 24px;
+    display:flex;align-items:center;gap:10px;
+    height:36px;
+  }
+  .banner-inner{
+    background:#c8952a;
+    padding:4px 20px;
+    display:flex;align-items:center;gap:10px;
+    clip-path:polygon(8px 0%,calc(100% - 8px) 0%,100% 50%,calc(100% - 8px) 100%,8px 100%,0% 50%);
+  }
+  .banner-team{
+    font-family:'Rajdhani',sans-serif;
+    font-size:15px;font-weight:700;
+    color:#0a0d14;letter-spacing:3px;text-transform:uppercase;
+  }
+  .banner-sep{color:#0a0d14;opacity:.5;font-size:12px;}
+  .banner-booyah{
+    font-family:'Rajdhani',sans-serif;
+    font-size:13px;font-weight:700;
+    color:#0a0d14;letter-spacing:4px;text-transform:uppercase;
+  }
+  .banner-logo{
+    width:22px;height:22px;object-fit:contain;border-radius:2px;
+  }
+
+  /* ── 2×2 Grid ── */
+  .grid{
+    position:absolute;
+    inset:8px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:1fr 1fr;
+    gap:4px;
+  }
+
+  /* ── Each cam cell ── */
+  .cam-cell{
+    position:relative;overflow:hidden;background:#06090f;
+  }
+
+  .cam-cell video{
+    width:100%;height:100%;object-fit:cover;display:block;
+  }
+
+  /* Photo fallback */
+  .cam-cell .photo-fb{
+    position:absolute;inset:0;
+    width:100%;height:100%;object-fit:cover;
+    display:block;
+  }
+
+  /* Waiting spinner */
+  .cell-wait{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    background:#06090f;
+  }
+  .cell-wait-ring{
+    width:32px;height:32px;
+    border:2px solid rgba(200,149,42,0.2);
+    border-top-color:#c8952a;
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── Corner brackets (gold) ── */
+  .cb{position:absolute;width:16px;height:16px;pointer-events:none;z-index:5;}
+  .cb.tl{top:4px;left:4px;border-top:2px solid #c8952a;border-left:2px solid #c8952a;}
+  .cb.tr{top:4px;right:4px;border-top:2px solid #c8952a;border-right:2px solid #c8952a;}
+  .cb.bl{bottom:26px;left:4px;border-bottom:2px solid #c8952a;border-left:2px solid #c8952a;}
+  .cb.br{bottom:26px;right:4px;border-bottom:2px solid #c8952a;border-right:2px solid #c8952a;}
+
+  /* ── Player name bar ── */
+  .name-bar{
+    position:absolute;bottom:0;left:0;right:0;height:24px;
+    background:#c8952a;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 10px;
+    z-index:5;
+  }
+  .name-bar .pname{
+    font-family:'Rajdhani',sans-serif;
+    font-size:13px;font-weight:700;
+    color:#0a0d14;letter-spacing:1.5px;text-transform:uppercase;
+  }
+  .name-bar .live-dot{
+    width:7px;height:7px;border-radius:50%;
+    background:#0a0d14;opacity:0;
+    transition:opacity .3s;
+  }
+  .name-bar .live-dot.on{
+    background:#00ff88;opacity:1;
+    animation:ldpulse 1.2s infinite;
+  }
+  @keyframes ldpulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Center divider logo ── */
+  #center-logo{
+    position:absolute;
+    left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    z-index:25;
+    width:52px;height:52px;
+    border-radius:50%;
+    background:#0a0d14;
+    border:2px solid #c8952a;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  #center-logo img{width:100%;height:100%;object-fit:contain;}
+  #center-logo .cl-ph{
+    font-family:'Rajdhani',sans-serif;
+    font-size:13px;font-weight:700;
+    color:#c8952a;letter-spacing:1px;
+  }
+
+  /* ── Grid divider lines ── */
+  .div-h{
+    position:absolute;left:8px;right:8px;
+    top:50%;height:4px;background:#0a0d14;
+    transform:translateY(-50%);z-index:15;
+  }
+  .div-v{
+    position:absolute;top:8px;bottom:8px;
+    left:50%;width:4px;background:#0a0d14;
+    transform:translateX(-50%);z-index:15;
+  }
+</style>
+</head>
+<body>
+
+<div id="waiting">
+  <div class="w-ring"></div>
+  <span>WAITING FOR BOOYAH</span>
+</div>
+
+<div id="stage">
+  <!-- Top banner -->
+  <div class="top-banner">
+    <div class="banner-inner">
+      <img class="banner-logo" id="banner-logo-img" src="" style="display:none"/>
+      <span class="banner-team" id="banner-name">—</span>
+      <span class="banner-sep">—</span>
+      <span class="banner-booyah">BOOYAH</span>
+    </div>
+  </div>
+
+  <!-- Divider lines -->
+  <div class="div-h"></div>
+  <div class="div-v"></div>
+
+  <!-- Center team logo circle -->
+  <div id="center-logo"><span class="cl-ph" id="cl-ph">UP</span></div>
+
+  <!-- 4 cam cells -->
+  <div class="grid" id="cam-grid"></div>
+</div>
+
+<script>
+const API    = location.origin;
+const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
+const params = new URLSearchParams(location.search);
+const ROOM   = params.get('room') || 'test';
+const PASS   = params.get('pass') || 'test';
+
+let ws = null;
+let booyahShown = false;
+const peers = new Map();
+const playerPhotos = {};
+const teamLogos    = {};
+
+// Boot
+(async function(){
+  try {
+    const [p,l] = await Promise.all([fetch('/api/players/photos'),fetch('/api/logos')]);
+    const pd = await p.json(); const ld = await l.json();
+    if(pd.photos) Object.assign(playerPhotos, pd.photos);
+    if(ld.logos)  Object.assign(teamLogos,    ld.logos);
+  } catch {}
+
+  // ?test=1 shows frame immediately with dummy players for preview
+  if(params.get('test') === '1') {
+    booyahShown = true;
+    showBooyah('RNX', null, [
+      {uid:'111',playerName:'RNX . PLAYER1'},
+      {uid:'222',playerName:'RNX . PLAYER2'},
+      {uid:'333',playerName:'RNX . PLAYER3'},
+      {uid:'444',playerName:'RNX . PLAYER4'},
+    ]);
+    return; // don't connect WS in test mode
+  }
+
+  connectWS();
+})();
+
+function connectWS(){
+  ws = new WebSocket(WS_URL);
+  ws.onopen  = () => send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+  ws.onclose = () => setTimeout(connectWS, 2000);
+  ws.onmessage = async (e) => {
+    const msg = JSON.parse(e.data);
+    if(msg.type === 'booyah-detected' && !booyahShown){
+      booyahShown = true;
+      showBooyah(msg.teamName, msg.teamLogo, msg.players);
+    }
+    if(msg.type === 'booyah-reset'){
+      booyahShown = false;
+      peers.forEach(function(conn){ if(conn.pc) conn.pc.close(); });
+      peers.clear();
+      document.getElementById('stage').style.display   = 'none';
+      document.getElementById('waiting').style.display = 'flex';
+    }
+    if(msg.type === 'answer'){
+      const conn = peers.get(msg.uid);
+      if(conn && conn.pc && conn.pc.signalingState !== 'stable')
+        await conn.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+    }
+    if(msg.type === 'ice' && msg.from === 'player'){
+      const conn = peers.get(msg.uid);
+      if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
+    }
+  };
+}
+
+function showBooyah(teamName, teamLogoUrl, players){
+  document.getElementById('waiting').style.display = 'none';
+  document.getElementById('stage').style.display   = 'block';
+
+  // Banner
+  const name = (teamName||'WINNER').toUpperCase();
+  document.getElementById('banner-name').textContent = name;
+
+  // Logo
+  const logo = teamLogoUrl || getLogo(teamName);
+  if(logo){
+    const li = document.getElementById('banner-logo-img');
+    li.src = logo; li.style.display = 'block';
+    const cl = document.getElementById('center-logo');
+    cl.innerHTML = '<img src="'+logo+'" style="width:100%;height:100%;object-fit:contain;">';
+  } else {
+    document.getElementById('cl-ph').textContent = name.slice(0,3);
+  }
+
+  // Build 4 cells
+  const grid  = document.getElementById('cam-grid');
+  grid.innerHTML = '';
+  const slots = (players||[]).slice(0,4);
+  while(slots.length < 4) slots.push(null);
+
+  slots.forEach(function(player){
+    const uid   = player ? String(player.uid || player.account_id || '') : '';
+    const pname = player ? (player.playerName || player.nickname || uid) : '—';
+    const photo = uid ? (playerPhotos[uid] || null) : null;
+
+    var cell = document.createElement('div');
+    cell.className = 'cam-cell';
+
+    // Video
+    var vid = document.createElement('video');
+    vid.autoplay = true; vid.playsInline = true;
+    vid.id = 'bvid-'+uid;
+    cell.appendChild(vid);
+
+    // Photo fallback
+    if(photo){
+      var img = document.createElement('img');
+      img.src = photo; img.className = 'photo-fb'; img.id = 'bphoto-'+uid;
+      cell.appendChild(img);
+    }
+
+    // Waiting ring (only if no photo)
+    if(!photo){
+      var w = document.createElement('div'); w.className='cell-wait'; w.id='bcellwait-'+uid;
+      var ring = document.createElement('div'); ring.className='cell-wait-ring';
+      w.appendChild(ring); cell.appendChild(w);
+    }
+
+    // Corner brackets
+    ['tl','tr','bl','br'].forEach(function(p2){
+      var cb = document.createElement('div'); cb.className='cb '+p2; cell.appendChild(cb);
+    });
+
+    // Name bar
+    var bar = document.createElement('div'); bar.className='name-bar';
+    bar.innerHTML = '<span class="pname">'+escH(pname)+'</span><span class="live-dot" id="bld-'+uid+'"></span>';
+    cell.appendChild(bar);
+
+    grid.appendChild(cell);
+    if(uid) requestStream(uid);
+  });
+}
+
+function requestStream(uid){
+  const pc = new RTCPeerConnection({
+    iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]
+  });
+  peers.set(uid,{pc});
+
+  pc.ontrack = function(ev){
+    var vid = document.getElementById('bvid-'+uid);
+    if(vid){
+      vid.srcObject = ev.streams[0];
+      var ph = document.getElementById('bphoto-'+uid);
+      if(ph) ph.style.display='none';
+      var cw = document.getElementById('bcellwait-'+uid);
+      if(cw) cw.style.display='none';
+      var ld = document.getElementById('bld-'+uid);
+      if(ld) ld.classList.add('on');
+    }
+  };
+
+  pc.onicecandidate = function(ev){
+    if(ev.candidate) send({type:'ice',roomName:ROOM,roomPassword:PASS,uid,candidate:ev.candidate,from:'booyah'});
+  };
+
+  send({type:'obs-request-stream',roomName:ROOM,roomPassword:PASS,uid,spectId:'booyah'});
+}
+
+function getLogo(name){
+  if(!name) return null;
+  if(teamLogos[name]) return teamLogos[name];
+  var k=Object.keys(teamLogos), l=name.toLowerCase().trim();
+  for(var i=0;i<k.length;i++) if(k[i].toLowerCase().trim()===l) return teamLogos[k[i]];
+  return null;
+}
+function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>

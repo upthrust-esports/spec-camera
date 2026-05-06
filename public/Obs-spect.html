@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OBS Spectator Feed</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent;
+    overflow: hidden;
+  }
+  video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    background: #000;
+  }
+  #waiting {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px;
+    background: #000; color: #333;
+    font-family: monospace; font-size: 13px;
+  }
+  #waiting .dot { animation: blink 1.2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+</style>
+</head>
+<body>
+
+<video id="feed" autoplay playsinline muted></video>
+<div id="waiting">
+  <span class="dot">● </span>
+  <span id="wait-msg">Waiting for spectator...</span>
+</div>
+
+<script>
+// ── Detect spect ID from URL path (/spect1, /spect2 ... /spect6) ─────────────
+const pathMatch  = location.pathname.match(/spect(\d+)/i);
+const SPECT_ID   = pathMatch ? pathMatch[1] : '1';
+const ROOM_NAME  = 'test';
+const ROOM_PASS  = 'test';
+const API        = location.origin;
+const WS_URL     = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
+
+let ws = null;
+let pc = null;
+let currentUid = null;
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    // Register as an OBS spectator viewer
+    send({ type: 'register-obs', roomName: ROOM_NAME, roomPassword: ROOM_PASS, spectId: SPECT_ID });
+  };
+
+  ws.onmessage = async (e) => {
+    const msg = JSON.parse(e.data);
+
+    // Server tells us which player this spectator is watching
+    if (msg.type === 'spect-update' && msg.spectId === SPECT_ID) {
+      if (msg.uid !== currentUid) {
+        currentUid = msg.uid;
+        if (msg.uid) {
+          setWaiting('Connecting to ' + msg.uid + '...');
+          requestStream(msg.uid);
+        } else {
+          setWaiting('Spectator ' + SPECT_ID + ' not watching anyone');
+          clearStream();
+        }
+      }
+    }
+
+    // WebRTC answer from player (via signaling)
+    if (msg.type === 'answer') {
+      if (pc && pc.signalingState !== 'stable') {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      }
+    }
+
+    // ICE from player
+    if (msg.type === 'ice' && msg.from === 'player') {
+      try { if (pc) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch {}
+    }
+
+    if (msg.type === 'obs-registered') {
+      // If a player is already assigned, request stream immediately
+      if (msg.uid) {
+        currentUid = msg.uid;
+        requestStream(msg.uid);
+      } else {
+        setWaiting('Spect ' + SPECT_ID + ' — waiting for assignment');
+      }
+    }
+
+    if (msg.type === 'player-stream-ready') {
+      // player is online and stream is available
+    }
+  };
+
+  ws.onclose = () => {
+    setWaiting('Disconnected — reconnecting...');
+    setTimeout(connectWS, 3000);
+  };
+}
+
+// ── Request stream from a specific player ─────────────────────────────────────
+async function requestStream(uid) {
+  clearStream();
+  setWaiting('Connecting to player ' + uid + '...');
+
+  pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ]
+  });
+
+  pc.ontrack = (event) => {
+    document.getElementById('feed').srcObject = event.streams[0];
+    document.getElementById('waiting').style.display = 'none';
+  };
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) send({
+      type: 'ice', roomName: ROOM_NAME, roomPassword: ROOM_PASS,
+      uid, candidate, from: 'obs', spectId: SPECT_ID
+    });
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      setWaiting('Stream lost — waiting...');
+      document.getElementById('waiting').style.display = 'flex';
+    }
+  };
+
+  // Ask server to forward offer request to the player
+  send({
+    type: 'obs-request-stream',
+    roomName: ROOM_NAME, roomPassword: ROOM_PASS,
+    uid, spectId: SPECT_ID
+  });
+}
+
+function clearStream() {
+  if (pc) { pc.close(); pc = null; }
+  const vid = document.getElementById('feed');
+  vid.srcObject = null;
+  document.getElementById('waiting').style.display = 'flex';
+}
+
+function setWaiting(msg) {
+  document.getElementById('wait-msg').textContent = msg;
+}
+
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+// ── Poll API as fallback (in case WS misses update) ──────────────────────────
+async function pollSpect() {
+  try {
+    const res  = await fetch(`${API}/api/spect/${SPECT_ID}?roomName=${encodeURIComponent(ROOM_NAME)}&roomPassword=${encodeURIComponent(ROOM_PASS)}`);
+    const data = await res.json();
+    if (data.uid && data.uid !== currentUid) {
+      currentUid = data.uid;
+      requestStream(data.uid);
+    } else if (!data.uid && currentUid) {
+      currentUid = null;
+      clearStream();
+      setWaiting('Spect ' + SPECT_ID + ' — not watching anyone');
+    }
+  } catch {}
+}
+
+connectWS();
+// Poll every 2 seconds as fallback
+setInterval(pollSpect, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Player Camera — Upthrust Esports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#080c10;--surface:#0e1520;--card:#111b28;--border:#1e2f45;--accent:#00e5ff;--accent2:#ff6b35;--green:#00ff88;--red:#ff3b5c;--yellow:#ffd166;--text:#e0eaf5;--muted:#5a7a9a;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+
+  header{position:relative;z-index:10;display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);background:rgba(8,12,16,0.95);backdrop-filter:blur(10px);}
+  .logo{width:30px;height:30px;border:2px solid var(--accent2);display:grid;place-items:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--accent2);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:rgba(255,107,53,0.08);}
+  header h1{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;text-transform:uppercase;}
+  header h1 span{color:var(--accent2);}
+  .hright{margin-left:auto;}
+  .admin-link{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:3px;transition:all .2s;}
+  .admin-link:hover{color:var(--accent);border-color:var(--accent);}
+
+  .wrap{position:relative;z-index:1;min-height:calc(100vh - 53px);display:flex;align-items:center;justify-content:center;padding:32px 16px;}
+
+  /* ── LOGIN ── */
+  #v-login{width:100%;max-width:400px;display:flex;flex-direction:column;gap:10px;}
+  .card{background:var(--surface);border:1px solid rgba(255,107,53,0.2);border-radius:10px;padding:26px 22px;display:flex;flex-direction:column;gap:14px;}
+  .card h2{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent2);}
+  .card p{font-size:12px;color:var(--muted);line-height:1.5;}
+  .fg{display:flex;flex-direction:column;gap:4px;}
+  .fg label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700;}
+  .fg input{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:10px 12px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;}
+  .fg input:focus{border-color:var(--accent2);}
+  .fg input::placeholder{color:var(--muted);}
+  .btn{width:100%;padding:12px;border:none;border-radius:4px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:all .2s;}
+  .btn-p{background:var(--accent2);color:#000;}
+  .btn-p:hover{background:#ff8555;transform:translateY(-1px);}
+  .btn-g{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:9px;}
+  .btn-g:hover{border-color:var(--muted);color:var(--text);}
+  .hint{font-size:11px;color:var(--muted);text-align:center;padding:10px;background:rgba(0,0,0,0.2);border-radius:4px;line-height:1.5;}
+
+  /* ── LIVE VIEW ── */
+  #v-live{display:none;width:100%;max-width:600px;flex-direction:column;gap:16px;}
+
+  .player-header{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:14px;}
+  .avatar{width:42px;height:42px;border-radius:50%;background:rgba(255,107,53,0.12);border:2px solid var(--accent2);display:grid;place-items:center;font-size:18px;flex-shrink:0;}
+  .player-meta h2{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;}
+  .player-meta .sub{font-size:11px;color:var(--muted);margin-top:2px;font-family:'Share Tech Mono',monospace;}
+  .conn-status{margin-left:auto;display:flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:10px;padding:4px 10px;border-radius:2px;border:1px solid;}
+  .conn-status.connecting{color:var(--yellow);border-color:rgba(255,209,102,0.3);background:rgba(255,209,102,0.06);}
+  .conn-status.live{color:var(--green);border-color:rgba(0,255,136,0.3);background:rgba(0,255,136,0.06);}
+  .conn-status.error{color:var(--red);border-color:rgba(255,59,92,0.3);background:rgba(255,59,92,0.06);}
+  .conn-status .dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:blink 1.5s infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* Camera box */
+  .cam-box{background:#000;border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative;aspect-ratio:9/16;max-height:60vh;}
+  .cam-box video{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s;}
+  .cam-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(0,0,0,0.8);}
+  .cam-overlay.hidden{display:none;}
+  .cam-overlay .icon{font-size:36px;opacity:.5;}
+  .cam-overlay p{font-size:12px;color:var(--muted);text-align:center;max-width:260px;line-height:1.5;}
+  .cam-overlay .allow-btn{background:var(--accent2);color:#000;border:none;border-radius:4px;padding:10px 22px;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s;}
+  .cam-overlay .allow-btn:hover{background:#ff8555;}
+
+  .cam-info{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 14px;display:flex;gap:16px;font-size:11px;}
+  .ci-item{display:flex;flex-direction:column;gap:3px;}
+  .ci-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+  .ci-val{font-family:'Share Tech Mono',monospace;color:var(--accent);}
+  .ci-val.orange{color:var(--accent2);}
+  .ci-val.green{color:var(--green);}
+
+  .warn{background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:5px;padding:10px 14px;font-size:11px;color:var(--yellow);line-height:1.5;}
+
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--accent2);border-radius:4px;padding:9px 14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent2);z-index:9999;transform:translateY(50px);opacity:0;transition:all .3s;}
+  .toast.show{transform:translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">UP</div>
+  <h1>Player <span>Camera</span></h1>
+  <div class="hright"><a href="/admin.html" class="admin-link">⚙ Operator</a></div>
+</header>
+
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="v-login">
+    <div class="card">
+      <h2>🎮 Join Room</h2>
+      <p>Enter your Free Fire UID to join. Your camera will be shared automatically with the operator.</p>
+      <div class="fg"><label>Your Free Fire UID</label><input id="p-uid" placeholder="Your FF UID" autocomplete="off" onkeydown="if(event.key==='Enter')joinRoom()"/></div>
+      <button class="btn btn-p" onclick="joinRoom()">🎮 JOIN & SHARE CAMERA</button>
+    </div>
+    <div class="hint">Once you join, your browser will request camera & microphone access. Your feed goes directly to the operator — no recording.</div>
+  </div>
+
+  <!-- LIVE VIEW -->
+  <div id="v-live">
+    <div class="player-header">
+      <div class="avatar">🎮</div>
+      <div class="player-meta">
+        <h2 id="pl-name">—</h2>
+        <div class="sub">SLOT <span id="pl-slot">—</span> &nbsp;·&nbsp; UID: <span id="pl-uid">—</span></div>
+      </div>
+      <div class="conn-status connecting" id="conn-badge"><span class="dot"></span><span id="conn-text">CONNECTING</span></div>
+    </div>
+
+    <div class="cam-box">
+      <video id="local-video" autoplay muted playsinline></video>
+      <div class="cam-overlay" id="cam-overlay">
+        <div class="icon">📷</div>
+        <p>Camera access required to stream your feed to the operator.</p>
+        <button class="allow-btn" onclick="startCamera()">ALLOW CAMERA ACCESS</button>
+      </div>
+    </div>
+
+    <div class="cam-info">
+      <div class="ci-item"><div class="ci-label">Camera</div><div class="ci-val orange" id="ci-cam">—</div></div>
+      <div class="ci-item"><div class="ci-label">Mic</div><div class="ci-val orange" id="ci-mic">—</div></div>
+      <div class="ci-item"><div class="ci-label">Stream</div><div class="ci-val green" id="ci-stream">OFFLINE</div></div>
+      <div class="ci-item"><div class="ci-label">Connection</div><div class="ci-val" id="ci-conn">—</div></div>
+    </div>
+
+    <div class="warn">⚠️ Keep this tab open. Closing it will stop your camera feed to the operator.</div>
+    <button class="btn btn-g" onclick="leaveRoom()">✕ LEAVE ROOM</button>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// Player page may be on port 7878 but API/WS are always on port 3000
+const API_HOST = location.hostname + ':3000';
+const API      = location.protocol + '//' + API_HOST;
+const WS_URL   = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + API_HOST;
+
+let S = { roomName:'', roomPassword:'', uid:'', playerName:'', slot:null };
+
+let ws      = null;
+let pc      = null;   // RTCPeerConnection
+let localStream = null;
+let makingOffer = false;
+
+// ── Join Room ─────────────────────────────────────────────────────────────────
+async function joinRoom() {
+  const uid = v('p-uid');
+  if (!uid) { toast('Enter your UID'); return; }
+
+  toast('Connecting...');
+  try {
+    const res  = await fetch(API + '/api/room/player-join', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ uid }),
+    });
+    const data = await res.json();
+    if (!res.ok) { toast('❌ ' + (data.error || 'Join failed')); return; }
+
+    S = { roomName: data.roomName, roomPassword: data.roomPassword,
+          uid, playerName: data.playerName, slot: data.slot };
+    toast('✅ Joined as ' + data.playerName);
+    showLive();
+    connectWS();
+  } catch(err) { toast('❌ Cannot reach server: ' + err.message); }
+}
+
+function showLive() {
+  document.getElementById('v-login').style.display = 'none';
+  document.getElementById('v-live').style.display  = 'flex';
+  document.getElementById('pl-name').textContent = S.playerName;
+  document.getElementById('pl-slot').textContent = S.slot || '—';
+  document.getElementById('pl-uid').textContent  = S.uid;
+}
+
+// ── WebSocket connection ──────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    wsSend({ type:'register-player', roomName: S.roomName, roomPassword: S.roomPassword, uid: S.uid });
+  };
+
+  ws.onmessage = async (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'registered') {
+      setStatus('connecting', 'CONNECTING...');
+      toast('Joined! Starting camera…');
+      startCamera(); // auto-start immediately, no admin permission needed
+    }
+
+    if (msg.type === 'error') {
+      setStatus('error', 'ERROR');
+      toast(msg.message);
+    }
+
+    // Admin just connected — re-send our offer so they can answer
+    if (msg.type === 'admin-joined') {
+      if (pc && localStream) {
+        toast('Admin connected — syncing…');
+        await renegotiate();
+      }
+    }
+
+    // Admin sent answer to our offer
+    if (msg.type === 'answer') {
+      if (pc && pc.signalingState !== 'stable') {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      }
+    }
+
+    // ICE from admin
+    if (msg.type === 'ice' && msg.from === 'admin') {
+      try {
+        if (pc) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+      } catch {}
+    }
+  };
+
+  ws.onclose = () => setStatus('error', 'DISCONNECTED');
+}
+
+// ── Camera & WebRTC ───────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal:1280 }, height: { ideal:720 }, frameRate: { ideal:30 } },
+      audio: true,
+    });
+
+    const vid = document.getElementById('local-video');
+    vid.srcObject = localStream;
+    document.getElementById('cam-overlay').classList.add('hidden');
+
+    // Show device names
+    const vTrack = localStream.getVideoTracks()[0];
+    const aTrack = localStream.getAudioTracks()[0];
+    document.getElementById('ci-cam').textContent = vTrack ? vTrack.label.slice(0,22) || 'Active' : 'None';
+    document.getElementById('ci-mic').textContent = aTrack ? aTrack.label.slice(0,22) || 'Active' : 'None';
+    document.getElementById('ci-stream').textContent = 'LIVE';
+
+    createPeerConnection();
+    startRetry();
+    toast('Camera active!');
+  } catch (err) {
+    toast('❌ Camera: ' + err.message);
+    setStatus('error', 'CAM DENIED');
+    console.error('Camera error:', err);
+  }
+}
+
+// Re-send offer to admin (called when admin connects late)
+async function renegotiate() {
+  try {
+    if (!pc || !localStream) return;
+    // Close old PC and create fresh one
+    pc.close();
+    createPeerConnection();
+  } catch(e) { console.error('renegotiate:', e); }
+}
+
+// Retry connection every 8 seconds if still not connected
+let retryInterval = null;
+function startRetry() {
+  if (retryInterval) return;
+  retryInterval = setInterval(async () => {
+    if (!pc || !localStream) return;
+    const state = pc.connectionState;
+    if (state === 'connected') {
+      clearInterval(retryInterval);
+      retryInterval = null;
+      return;
+    }
+    if (state === 'failed' || state === 'disconnected' || state === 'new' || state === 'connecting') {
+      console.log('[RETRY] Re-sending offer, state:', state);
+      await renegotiate();
+    }
+  }, 8000);
+}
+
+function createPeerConnection() {
+  pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ]
+  });
+
+  // Add all tracks
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  // Send ICE candidates to admin via server
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) {
+      wsSend({ type:'ice', roomName: S.roomName, roomPassword: S.roomPassword,
+        uid: S.uid, candidate, from:'player' });
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    document.getElementById('ci-conn').textContent = s.toUpperCase();
+    if (s === 'connected') {
+      setStatus('live', 'LIVE');
+      // Stop retry once connected
+      if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+    } else if (s === 'failed' || s === 'disconnected') {
+      setStatus('error', s.toUpperCase());
+      startRetry(); // restart retry on failure
+    }
+  };
+
+  pc.onnegotiationneeded = async () => {
+    try {
+      makingOffer = true;
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      wsSend({ type:'offer', roomName: S.roomName, roomPassword: S.roomPassword,
+        uid: S.uid, sdp: pc.localDescription });
+    } catch(e) { console.error(e); }
+    finally { makingOffer = false; }
+  };
+}
+
+// ── Leave ─────────────────────────────────────────────────────────────────────
+function leaveRoom() {
+  if (localStream) localStream.getTracks().forEach(t => t.stop());
+  if (pc)  pc.close();
+  if (ws)  ws.close();
+  localStream = pc = ws = null;
+  if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+  S = { roomName:'', roomPassword:'', uid:'', playerName:'', slot:null };
+  document.getElementById('v-live').style.display  = 'none';
+  document.getElementById('v-login').style.display = 'flex';
+  document.getElementById('cam-overlay').classList.remove('hidden');
+  document.getElementById('local-video').srcObject = null;
+  ['ci-cam','ci-mic','ci-conn'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('ci-stream').textContent = 'OFFLINE';
+  toast('Left room');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setStatus(cls, txt) {
+  const el = document.getElementById('conn-badge');
+  el.className = 'conn-status ' + cls;
+  el.innerHTML = `<span class="dot"></span><span>${txt}</span>`;
+}
+function wsSend(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function v(id) { return document.getElementById(id).value.trim(); }
+let _tt;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => el.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>

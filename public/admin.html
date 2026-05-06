@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin Panel — Upthrust Esports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c10;--surface:#0e1520;--card:#111b28;--border:#1e2f45;--accent:#00e5ff;--accent2:#ff6b35;--green:#00ff88;--red:#ff3b5c;--yellow:#ffd166;--text:#e0eaf5;--muted:#5a7a9a;--glow:0 0 18px rgba(0,229,255,0.2);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+
+header{position:relative;z-index:10;display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--border);background:rgba(8,12,16,0.95);backdrop-filter:blur(10px);}
+.logo{width:28px;height:28px;border:2px solid var(--accent);display:grid;place-items:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10px;color:var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:rgba(0,229,255,0.07);}
+header h1{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;}
+header h1 span{color:var(--accent);}
+.hright{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.pill{padding:3px 8px;border-radius:2px;font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:rgba(0,229,255,0.1);color:var(--accent);border:1px solid rgba(0,229,255,0.25);display:none;}
+.hbtn{background:none;border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:3px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:none;transition:all .2s;}
+.hbtn:hover{border-color:var(--red);color:var(--red);}
+.blink{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);text-decoration:none;padding:3px 9px;border:1px solid var(--border);border-radius:3px;transition:all .2s;}
+.blink:hover{color:var(--accent2);border-color:var(--accent2);}
+
+.view{display:none;position:relative;z-index:1;}
+.view.active{display:flex;}
+
+/* LOGIN */
+#vl{min-height:calc(100vh - 49px);align-items:center;justify-content:center;padding:40px 16px;}
+.lw{width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
+.lc{background:var(--surface);border:1px solid rgba(0,229,255,0.2);border-radius:10px;padding:26px 22px;display:flex;flex-direction:column;gap:14px;}
+.lc h2{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);}
+.fg{display:flex;flex-direction:column;gap:4px;}
+.fg label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700;}
+.fg input,.fg select{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:10px 12px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;width:100%;}
+.fg input:focus{border-color:var(--accent);box-shadow:var(--glow);}
+.fg input::placeholder{color:var(--muted);}
+.btn-login{width:100%;padding:12px;border:none;border-radius:4px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;background:var(--accent);color:#000;transition:all .2s;}
+.btn-login:hover{background:#33edff;box-shadow:var(--glow);}
+.err-msg{font-size:11px;color:var(--red);text-align:center;padding:7px;background:rgba(255,59,92,0.06);border:1px solid rgba(255,59,92,0.2);border-radius:4px;display:none;}
+
+/* DASHBOARD */
+#vd{min-height:calc(100vh - 49px);flex-direction:row;}
+.sidebar{width:210px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:16px 13px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
+.pt{font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:6px;}
+.pt::before{content:'';width:3px;height:10px;background:var(--accent);display:block;flex-shrink:0;}
+.son{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:2px;background:rgba(0,255,136,0.07);color:var(--green);border:1px solid rgba(0,255,136,0.18);font-family:'Share Tech Mono',monospace;font-size:9px;}
+.son .d{width:5px;height:5px;border-radius:50%;background:currentColor;animation:bl 1.5s infinite;flex-shrink:0;}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:.3}}
+.ib{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:9px;display:flex;flex-direction:column;gap:4px;}
+.ir{display:flex;justify-content:space-between;font-size:10px;}
+.ir .k{color:var(--muted);}
+.ir .v{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:10px;}
+.online-list{display:flex;flex-direction:column;gap:3px;max-height:240px;overflow-y:auto;}
+.online-item{display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--card);border:1px solid var(--border);border-radius:3px;font-size:10px;cursor:pointer;transition:border-color .2s;}
+.online-item:hover{border-color:var(--accent);}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0;animation:bl 1.5s infinite;}
+.pname{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.slot-t{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--accent2);}
+.sbbtn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:6px;border-radius:3px;cursor:pointer;width:100%;transition:all .2s;}
+.sbbtn:hover{border-color:var(--muted);color:var(--text);}
+.sbbtn.danger{border-color:rgba(255,59,92,.25);color:var(--red);}
+.sbbtn.danger:hover{background:rgba(255,59,92,.08);}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.15);flex-shrink:0;}
+.tbtn{padding:9px 14px;background:none;border:none;font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;white-space:nowrap;}
+.tbtn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tbtn:hover:not(.active){color:var(--text);}
+.tab{display:none;overflow-y:auto;flex:1;}
+.tab.active{display:block;}
+.tp{padding:16px 20px;}
+
+/* BOXES */
+.box{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;}
+.bh{padding:8px 13px;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--border);font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.bb{padding:12px;}
+
+/* IMPORT */
+.import-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.drop-zone{border:2px dashed var(--border);border-radius:8px;padding:24px 16px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(0,0,0,0.15);}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:rgba(0,229,255,0.03);}
+.dz-icon{font-size:26px;margin-bottom:6px;opacity:.5;}
+.dz-title{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.dz-sub{font-size:10px;color:var(--muted);}
+.dz-fmt{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);margin-top:5px;}
+.csv-eg{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;padding:9px 11px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);line-height:1.6;margin-top:8px;}
+.csv-eg .ch{color:var(--accent);font-size:8px;letter-spacing:1px;display:block;margin-bottom:3px;}
+.prev-wrap{background:var(--card);border:1px solid var(--border);border-radius:4px;max-height:220px;overflow-y:auto;}
+.prev-header{display:grid;grid-template-columns:24px 1fr 100px 80px 40px;gap:6px;padding:5px 10px;border-bottom:1px solid var(--border);font-family:'Rajdhani',sans-serif;font-size:8px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;}
+.prev-row{display:grid;grid-template-columns:24px 1fr 100px 80px 40px;gap:6px;padding:5px 10px;border-bottom:1px solid rgba(30,47,69,0.3);font-size:10px;align-items:center;}
+.prev-row:last-child{border-bottom:none;}
+.prev-logo{width:20px;height:20px;border-radius:2px;object-fit:contain;}
+.prev-logo-ph{width:20px;height:20px;border-radius:2px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.15);display:grid;place-items:center;font-size:8px;}
+.prev-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prev-team{color:var(--accent2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prev-uid{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:9px;}
+.prev-slot{font-family:'Share Tech Mono',monospace;color:var(--muted);font-size:9px;}
+.imp-stats{display:flex;gap:10px;margin:8px 0;font-size:10px;}
+.imp-stat{background:var(--card);border:1px solid var(--border);border-radius:3px;padding:4px 10px;display:flex;flex-direction:column;align-items:center;gap:1px;}
+.imp-stat .sv{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--accent);}
+.imp-stat .sk{font-size:8px;color:var(--muted);letter-spacing:1px;}
+.imp-btns{display:flex;gap:7px;margin-top:8px;}
+.btn-green{background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 16px;font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s;}
+.btn-green:hover{background:#33ffaa;}
+.btn-ghost-s{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:8px 12px;font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s;}
+.btn-ghost-s:hover{border-color:var(--red);color:var(--red);}
+
+/* LOGOS */
+.logo-drop{border:2px dashed var(--border);border-radius:6px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;}
+.logo-drop:hover,.logo-drop.drag-over{border-color:var(--accent2);background:rgba(255,107,53,0.03);}
+.logos-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.logo-item{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:7px;text-align:center;position:relative;width:72px;}
+.logo-item img{width:44px;height:44px;object-fit:contain;}
+.logo-item .lname{font-size:8px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.logo-item .ldel{position:absolute;top:2px;right:2px;background:rgba(255,59,92,0.8);color:#fff;border:none;border-radius:2px;width:13px;height:13px;font-size:8px;cursor:pointer;display:none;place-items:center;}
+.logo-item:hover .ldel{display:grid;}
+
+/* TEAMS TAB */
+.teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+.team-card{background:var(--card);border:1px solid var(--border);border-radius:7px;overflow:hidden;transition:border-color .2s;}
+.team-card:hover{border-color:rgba(0,229,255,0.3);}
+.tc-head{padding:12px;background:rgba(0,0,0,0.2);display:flex;align-items:center;gap:12px;}
+.tc-logo{width:52px;height:52px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,0.04);border:1px solid var(--border);display:grid;place-items:center;flex-shrink:0;}
+.tc-logo img{width:100%;height:100%;object-fit:contain;}
+.tc-info .tn{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:1px;}
+.tc-info .tc{font-size:10px;color:var(--muted);margin-top:2px;}
+.tc-live{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--green);margin-left:auto;}
+.tc-players{padding:7px 12px;display:flex;flex-direction:column;gap:3px;}
+.tp-row{display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0;border-bottom:1px solid rgba(30,47,69,0.25);}
+.tp-row:last-child{border-bottom:none;}
+.tp-name{font-weight:600;}
+.tp-uid{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:9px;}
+.tp-live{width:6px;height:6px;border-radius:50%;background:var(--green);animation:bl 1.2s infinite;}
+.tp-offline{width:6px;height:6px;border-radius:50%;background:var(--border);}
+
+/* CAMERAS TAB */
+.cam-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.search-box{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;width:180px;transition:border-color .2s;}
+.search-box:focus{border-color:var(--accent);}
+.search-box::placeholder{color:var(--muted);}
+.filter-sel{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;outline:none;cursor:pointer;}
+.filter-sel option{background:var(--surface);}
+.count-badge{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-left:auto;}
+
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;padding:6px 10px;font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);}
+td{padding:7px 10px;font-size:11px;border-bottom:1px solid rgba(30,47,69,0.3);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(0,229,255,0.015);}
+.uc{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:10px;}
+.st{background:rgba(255,107,53,0.1);color:var(--accent2);border:1px solid rgba(255,107,53,0.2);padding:1px 5px;border-radius:2px;font-family:'Share Tech Mono',monospace;font-size:9px;}
+.live-badge{background:rgba(0,255,136,0.1);color:var(--green);border:1px solid rgba(0,255,136,0.2);padding:2px 6px;border-radius:2px;font-family:'Share Tech Mono',monospace;font-size:8px;display:inline-flex;align-items:center;gap:3px;}
+.live-badge .d{width:4px;height:4px;border-radius:50%;background:currentColor;animation:bl 1.2s infinite;}
+.offline-badge{background:rgba(90,122,154,0.08);color:var(--muted);border:1px solid var(--border);padding:2px 6px;border-radius:2px;font-family:'Share Tech Mono',monospace;font-size:8px;}
+.team-badge{padding:2px 6px;border-radius:2px;font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;background:rgba(255,107,53,0.08);color:var(--accent2);border:1px solid rgba(255,107,53,0.18);}
+.tlogo-sm{width:16px;height:16px;border-radius:2px;object-fit:contain;vertical-align:middle;margin-right:4px;}
+.bs{padding:3px 7px;border-radius:3px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .15s;}
+.brm{background:rgba(255,59,92,0.1);color:var(--red);border:1px solid rgba(255,59,92,0.2);}
+.brm:hover{background:rgba(255,59,92,0.2);}
+.empty-r td{text-align:center;padding:28px;color:var(--muted);font-size:11px;}
+
+/* SINGLE ADD FORM */
+.af{display:grid;grid-template-columns:1fr 1fr 1fr 60px 52px;gap:6px;align-items:end;}
+.af input,.af select{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;width:100%;}
+.af input:focus,.af select:focus{border-color:var(--accent);}
+.af label{font-size:8px;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:2px;text-transform:uppercase;}
+.af select option{background:var(--surface);}
+.btnadd{background:var(--accent);color:#000;border:none;border-radius:4px;padding:6px;font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;width:100%;transition:all .2s;}
+.btnadd:hover{background:#33edff;}
+
+/* FEEDS */
+.feeds-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.feeds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
+.feed-card{background:var(--surface);border:1px solid var(--border);border-radius:7px;overflow:hidden;transition:border-color .2s;}
+.feed-card:hover{border-color:rgba(0,229,255,0.3);}
+.feed-header{padding:8px 11px;background:rgba(0,0,0,0.3);display:flex;align-items:center;gap:7px;}
+.feed-tlogo{width:22px;height:22px;border-radius:3px;object-fit:contain;flex-shrink:0;}
+.feed-tlogo-ph{width:22px;height:22px;border-radius:3px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.12);display:grid;place-items:center;font-size:9px;flex-shrink:0;}
+.feed-info{flex:1;min-width:0;}
+.feed-name{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.feed-team{font-size:8px;color:var(--accent2);font-family:'Share Tech Mono',monospace;}
+.feed-meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;}
+.feed-video-wrap{background:#000;position:relative;aspect-ratio:16/9;overflow:hidden;}
+.feed-video-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+.feed-waiting{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:#000;overflow:hidden;}
+.feed-waiting .icon{font-size:22px;opacity:.3;}
+.feed-waiting p{font-size:9px;color:var(--muted);}
+.feed-waiting img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.55;filter:brightness(0.7);}
+.feed-footer{padding:5px 11px;display:flex;align-items:center;justify-content:space-between;}
+.feed-uid{font-family:'Share Tech Mono',monospace;color:var(--muted);font-size:9px;}
+.audio-wrap{display:flex;align-items:center;gap:4px;}
+.audio-label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);}
+.audio-bars{display:flex;align-items:flex-end;gap:2px;height:12px;}
+.audio-bar{width:3px;background:var(--border);border-radius:1px;transition:height .08s,background .08s;}
+.no-feeds{text-align:center;padding:50px 20px;color:var(--muted);font-size:12px;}
+.no-feeds .icon{font-size:32px;opacity:.3;margin-bottom:8px;}
+.team-group-label{font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:8px 0 6px;display:flex;align-items:center;gap:8px;grid-column:1/-1;}
+.team-group-label img{width:16px;height:16px;object-fit:contain;border-radius:2px;}
+.team-group-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.spect-row{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:5px;padding:12px;transition:border-color .2s;}
+.spect-row:hover{border-color:rgba(0,229,255,0.2);}
+.spect-id{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;}
+.spect-id-input{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;width:90px;transition:border-color .2s;}
+.spect-id-input:focus{border-color:var(--accent);}
+.spect-url{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
+.spect-url:hover{color:var(--accent);}
+.spect-player{font-size:11px;font-weight:600;color:var(--text);}
+.spect-player.empty{color:var(--muted);font-style:italic;}
+.spect-uid-sel{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;outline:none;width:100%;}
+.spect-uid-sel:focus{border-color:var(--accent);}
+.spect-uid-sel option{background:var(--surface);}
+.btn-spect-set{background:var(--accent);color:#000;border:none;border-radius:3px;padding:5px 10px;font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s;width:100%;}
+.btn-spect-set:hover{background:#33edff;}
+.spect-live{display:inline-flex;align-items:center;gap:4px;background:rgba(0,255,136,0.1);color:var(--green);border:1px solid rgba(0,255,136,0.2);padding:2px 7px;border-radius:2px;font-family:'Share Tech Mono',monospace;font-size:8px;}
+.spect-live .d{width:4px;height:4px;border-radius:50%;background:currentColor;animation:bl 1.2s infinite;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--accent);border-radius:4px;padding:8px 13px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);z-index:9999;transform:translateY(50px);opacity:0;transition:all .3s;}
+.toast.show{transform:translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">UP</div>
+  <h1><span>Admin</span> Panel — Upthrust Esports</h1>
+  <div class="hright">
+    <span class="pill" id="h-pill">⚙ ADMIN</span>
+    <button class="hbtn" id="h-logout" onclick="logout()">✕ LOGOUT</button>
+    <a href="/index.html" class="blink">← Player Page</a>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="view active" id="vl">
+  <div class="lw" style="margin:auto">
+    <div class="lc">
+      <h2>⚙ Operator Login</h2>
+      <div class="fg"><label>Username</label><input id="a-user" placeholder="Username" autocomplete="off" onkeydown="if(event.key==='Enter')adminLogin()"/></div>
+      <div class="fg"><label>Password</label><input id="a-pass" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')adminLogin()"/></div>
+      <div class="err-msg" id="err-msg">❌ Invalid username or password</div>
+      <button class="btn-login" onclick="adminLogin()">⚡ LOGIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="view" id="vd">
+  <aside class="sidebar">
+    <div class="pt">Room Info</div>
+    <div class="son"><span class="d"></span>ADMIN LIVE</div>
+    <div class="ib">
+      <div class="ir"><span class="k">Room</span><span class="v" id="d-room">—</span></div>
+      <div class="ir"><span class="k">Players</span><span class="v" id="d-reg">0</span></div>
+      <div class="ir"><span class="k">Teams</span><span class="v" id="d-teams">0</span></div>
+      <div class="ir"><span class="k">Online</span><span class="v" id="d-online" style="color:var(--green)">0</span></div>
+    </div>
+    <div class="pt">Online Players</div>
+    <div class="online-list" id="online-list">
+      <div style="font-size:10px;color:var(--muted);padding:3px 0">No players online</div>
+    </div>
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:5px;">
+      <button class="sbbtn" onclick="refreshAll()">↻ REFRESH</button>
+      <button class="sbbtn danger" onclick="logout()">✕ LOGOUT</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="tabs">
+      <button class="tbtn active" onclick="aTab('import')">📥 Import</button>
+      <button class="tbtn"        onclick="aTab('teams')">🏆 Teams</button>
+      <button class="tbtn"        onclick="aTab('cams')">🎥 Players</button>
+      <button class="tbtn"        onclick="aTab('feeds')">📺 Live Feeds</button>
+      <button class="tbtn"        onclick="aTab('spect')">🎬 OBS Spect</button>
+    </div>
+
+    <!-- IMPORT TAB -->
+    <div class="tab active" id="t-import"><div class="tp">
+
+      <div class="box">
+        <div class="bh">🖼️ Team Logos — upload first (filename = team name)</div>
+        <div class="bb">
+          <div class="logo-drop" id="logo-drop" onclick="document.getElementById('logo-files').click()" ondragover="dzOver(event,'logo-drop')" ondragleave="dzLeave('logo-drop')" ondrop="dzDrop(event,'logo')">
+            <div style="font-size:20px;opacity:.5;margin-bottom:4px">🖼️</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700">Upload Team Logos</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">PNG/JPG/SVG · filename = team name (e.g. <span style="color:var(--accent)">TeamA.png</span>)</div>
+          </div>
+          <input type="file" id="logo-files" accept="image/*" multiple style="display:none" onchange="loadLogos(this)"/>
+          <div class="logos-grid" id="logos-grid"></div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="bh">📄 CSV Import — 12 teams × 4 players = 48 rows</div>
+        <div class="bb">
+          <div class="import-cols">
+            <div>
+              <div class="drop-zone" id="csv-drop" onclick="document.getElementById('csv-file').click()" ondragover="dzOver(event,'csv-drop')" ondragleave="dzLeave('csv-drop')" ondrop="dzDrop(event,'csv')">
+                <div class="dz-icon">📄</div>
+                <div class="dz-title">Drop CSV Here</div>
+                <div class="dz-sub">or click to browse</div>
+                <div class="dz-fmt">team,player_name,uid,slot</div>
+              </div>
+              <input type="file" id="csv-file" accept=".csv,.txt" style="display:none" onchange="loadCSV(this)"/>
+              <div class="csv-eg">
+                <span class="ch">📋 FORMAT (no header row needed):</span>
+                TeamAlpha,IronFist,100000001,1<br/>
+                TeamAlpha,Sniper99,100000002,2<br/>
+                TeamAlpha,Rusher_X,100000003,3<br/>
+                TeamAlpha,Support1,100000004,4<br/>
+                TeamBeta,BlazeGun,200000001,5<br/>
+                TeamBeta,GhostWlk,200000002,6
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">Preview</span>
+                <span id="prev-count" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted)"></span>
+              </div>
+              <div class="prev-wrap" id="csv-preview">
+                <div style="color:var(--muted);font-size:10px;text-align:center;padding:20px">No CSV loaded</div>
+              </div>
+              <div class="imp-stats" id="imp-stats" style="display:none">
+                <div class="imp-stat"><span class="sv" id="ist-players">0</span><span class="sk">PLAYERS</span></div>
+                <div class="imp-stat"><span class="sv" id="ist-teams">0</span><span class="sk">TEAMS</span></div>
+                <div class="imp-stat"><span class="sv" id="ist-logos">0</span><span class="sk">LOGOS MATCHED</span></div>
+              </div>
+              <div class="imp-btns" id="imp-btns" style="display:none">
+                <button class="btn-green" onclick="importPlayers()">✅ IMPORT ALL</button>
+                <button class="btn-ghost-s" onclick="clearImport()">✕ CLEAR</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="bh">{ } JSON Import</div>
+        <div class="bb">
+          <textarea id="json-input" style="width:100%;height:90px;background:var(--card);border:1px solid var(--border);border-radius:4px;padding:9px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;outline:none;resize:vertical;" placeholder='[{"team":"TeamA","name":"Player1","uid":"123456789","slot":1},{"team":"TeamA","name":"Player2","uid":"987654321","slot":2}]'></textarea>
+          <div style="display:flex;gap:7px;margin-top:7px;">
+            <button class="btn-green" onclick="importJSON()">✅ IMPORT JSON</button>
+            <button class="btn-ghost-s" onclick="document.getElementById('json-input').value=''">✕ CLEAR</button>
+          </div>
+        </div>
+      </div>
+
+    </div></div>
+
+    <!-- TEAMS TAB -->
+    <div class="tab" id="t-teams"><div class="tp">
+      <div class="box">
+        <div class="bh">
+          <span>All Teams</span>
+          <span id="teams-badge" style="font-size:9px;color:var(--muted)">0 teams · 0 players</span>
+        </div>
+        <div class="bb">
+          <div class="teams-grid" id="teams-grid">
+            <div style="color:var(--muted);font-size:11px;text-align:center;padding:30px;grid-column:1/-1">No teams imported yet.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+
+    <!-- CAMERAS / PLAYERS TAB -->
+    <div class="tab" id="t-cams"><div class="tp">
+      <div class="box">
+        <div class="bh">Add Single Player</div>
+        <div class="bb">
+          <div class="af">
+            <div><label>Name</label><input id="cn" placeholder="PLAYER_NAME"/></div>
+            <div><label>UID</label><input id="cu" placeholder="123456789"/></div>
+            <div><label>Team</label><select id="ct"><option value="">— No Team —</option></select></div>
+            <div><label>Slot</label><select id="cs"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option><option>31</option><option>32</option><option>33</option><option>34</option><option>35</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option><option>46</option><option>47</option><option>48</option></select></div>
+            <div><label>&nbsp;</label><button class="btnadd" onclick="addCam()">ADD</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="bh">
+          <span>All Players</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span id="cam-badge" style="font-size:9px;color:var(--muted)">0</span>
+            <button class="bs brm" onclick="clearAllCams()">CLEAR ALL</button>
+          </div>
+        </div>
+        <div class="bb" style="padding:8px 0">
+          <div class="cam-toolbar" style="padding:0 10px">
+            <input class="search-box" id="cam-search" placeholder="Search player or UID..." oninput="renderCameras()"/>
+            <select class="filter-sel" id="cam-team-filter" onchange="renderCameras()">
+              <option value="">All Teams</option>
+            </select>
+            <select class="filter-sel" id="cam-status-filter" onchange="renderCameras()">
+              <option value="">All Status</option>
+              <option value="live">Live Only</option>
+              <option value="offline">Offline Only</option>
+            </select>
+            <span class="count-badge" id="cam-filtered-count"></span>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Slot</th><th>Team</th><th>Player</th><th>UID</th><th>Status</th><th></th></tr></thead>
+          <tbody id="cam-tbody"></tbody>
+        </table>
+      </div>
+    </div></div>
+
+    <!-- SPECT TAB -->
+    <div class="tab" id="t-spect"><div class="tp">
+
+      <!-- FF API Config -->
+      <div class="box">
+        <div class="bh">
+          <span>⚡ FF CG Engine — Auto Spectator Tracking</span>
+          <span id="poll-badge" class="offline-badge">POLLING OFF</span>
+        </div>
+        <div class="bb">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Match ID</div>
+              <input id="ff-match-id" class="search-box" style="width:100%" placeholder="e.g. 2003443494469390336"/>
+            </div>
+            <div>
+              <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Client ID</div>
+              <input id="ff-client-id" class="search-box" style="width:100%" placeholder="a7f92e27-5387-4b29-bf1e-6e3c22fe78d2" value="a7f92e27-5387-4b29-bf1e-6e3c22fe78d2"/>
+            </div>
+          </div>
+          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Spectator Observer UIDs — enter the FF account UID of each spectator PC (max 6)</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-size:9px;color:var(--muted);">SPECT 1 Observer UID</div>
+              <input id="obs-uid-1" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-size:9px;color:var(--muted);">SPECT 2 Observer UID</div>
+              <input id="obs-uid-2" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-size:9px;color:var(--muted);">SPECT 3 Observer UID</div>
+              <input id="obs-uid-3" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-size:9px;color:var(--muted);">SPECT 4 Observer UID</div>
+              <input id="obs-uid-4" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-size:9px;color:var(--muted);">SPECT 5 Observer UID</div>
+              <input id="obs-uid-5" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-size:9px;color:var(--muted);">SPECT 6 Observer UID</div>
+              <input id="obs-uid-6" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-green" onclick="startFFPolling()" style="padding:8px 20px;font-size:11px;">▶ START AUTO TRACKING</button>
+            <button class="btn-ghost-s" onclick="stopFFPolling()" style="padding:8px 16px;font-size:11px;">■ STOP</button>
+            <button class="btn-ghost-s" onclick="loadFFConfig()" style="padding:8px 16px;font-size:11px;">↻ LOAD SAVED</button>
+          </div>
+          <div id="poll-log" style="margin-top:10px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);max-height:80px;overflow-y:auto;display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Spect Slots -->
+      <div class="box">
+        <div class="bh">
+          <span>📺 OBS Browser Source Links</span>
+          <span style="font-size:9px;color:var(--muted)">Auto-switches when FF API detects observer change</span>
+        </div>
+        <div class="bb">
+          <div id="spect-grid" style="display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="bh">
+          <span>🏆 Booyah Cam — OBS Browser Source</span>
+          <span id="booyah-badge" class="offline-badge">WAITING</span>
+        </div>
+        <div class="bb">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">OBS Browser Source URL</div>
+              <div class="spect-url" id="booyah-url" onclick="copyText(location.origin+'/booyah?room='+encodeURIComponent(S.roomName)+'&pass='+encodeURIComponent(S.roomPassword))" style="cursor:pointer;font-size:11px;color:var(--accent);">
+                Click after login to copy
+              </div>
+            </div>
+            <button class="btn-green" style="padding:7px 16px;font-size:11px;" onclick="testBooyah()">⚡ TEST BOOYAH</button>
+            <button class="btn-ghost-s" style="padding:7px 14px;font-size:11px;" onclick="resetBooyah()">↺ RESET</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6;">
+            Add <code style="color:var(--accent)">/booyah</code> as a 1280×720 OBS browser source.
+            When Garena API detects a booyah, it auto-shows all 4 winning players' live cameras in a 2×2 grid.
+          </div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="bh">📋 OBS Setup</div>
+        <div class="bb" style="font-size:11px;color:var(--muted);line-height:1.8;">
+          1. Add a <strong style="color:var(--accent)">Browser Source</strong> in OBS for each spectator PC<br/>
+          2. Copy the URL from each row → paste into OBS browser source URL<br/>
+          3. Size: <strong style="color:var(--accent)">1280 × 720</strong><br/>
+          4. Check <strong style="color:var(--accent)">"Refresh browser when scene becomes active"</strong><br/>
+          5. Enter Match ID + Observer UIDs above → Start Auto Tracking → feeds switch automatically ✅
+        </div>
+      </div>
+
+    </div></div>
+
+    <!-- FEEDS TAB -->
+    <div class="tab" id="t-feeds"><div class="tp">
+      <div class="feeds-toolbar">
+        <input class="search-box" id="feed-search" placeholder="Search player..." oninput="renderFeeds()"/>
+        <select class="filter-sel" id="feed-team-filter" onchange="renderFeeds()">
+          <option value="">All Teams</option>
+        </select>
+        <select class="filter-sel" id="feed-status-filter" onchange="renderFeeds()">
+          <option value="">All</option>
+          <option value="live">Live Only</option>
+        </select>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-left:auto" id="feeds-count"></span>
+      </div>
+      <div class="feeds-grid" id="feeds-grid">
+        <div class="no-feeds"><div class="icon">📡</div><p>No live feeds yet.</p></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API    = location.origin;
+const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
+const ADMIN_U = 'angry', ADMIN_P = 'angry0306';
+
+let S  = { roomName:'', roomPassword:'', adminToken:'', cameras:[] };
+let ws = null;
+const peerConns      = new Map();
+const onlinePlayers  = new Map();
+const audioAnalysers = new Map();
+// teamLogos persisted in localStorage: teamName -> dataURL
+const teamLogos = JSON.parse(localStorage.getItem('upthrust_logos')||'{}');
+// playerPhotos: uid or playerName -> URL from public/players/ folder
+const playerPhotos = {};
+
+async function fetchPlayerPhotos() {
+  try {
+    const res  = await fetch('/api/players/photos');
+    const data = await res.json();
+    if(data.photos){
+      Object.entries(data.photos).forEach(function(e){ playerPhotos[e[0]] = e[1]; });
+    }
+    console.log('[PHOTOS] Loaded:', Object.keys(playerPhotos));
+  } catch(e){ console.warn('fetchPlayerPhotos:', e); }
+}
+
+// Get photo for a player — try UID first, then playerName, then partial match
+function getPlayerPhoto(uid, playerName) {
+  if(uid && playerPhotos[uid])         return playerPhotos[uid];
+  if(playerName && playerPhotos[playerName]) return playerPhotos[playerName];
+  // try case-insensitive name match
+  if(playerName){
+    var lower = playerName.toLowerCase().trim();
+    var keys  = Object.keys(playerPhotos);
+    for(var i=0;i<keys.length;i++){
+      if(keys[i].toLowerCase().trim() === lower) return playerPhotos[keys[i]];
+    }
+  }
+  return null;
+}
+
+// Load logos from server public/logos/ folder (filename = team name)
+async function fetchServerLogos() {
+  try {
+    const res  = await fetch('/api/logos');
+    const data = await res.json();
+    if (data.logos) {
+      // Store with original filename key
+      Object.entries(data.logos).forEach(function(entry){
+        var team = entry[0];
+        var url  = entry[1];
+        teamLogos[team] = url;
+        // Also store lowercase and trimmed variants for fuzzy match
+        teamLogos[team.toLowerCase().trim()] = url;
+        teamLogos[team.replace(/\s+/g,'_')] = url;
+        teamLogos[team.replace(/_/g,' ')] = url;
+      });
+    }
+  } catch(e){ console.warn('fetchServerLogos error:', e); }
+}
+
+// Helper: get logo for a team name with fuzzy matching
+function getTeamLogo(teamName) {
+  if(!teamName) return null;
+  // Try exact match first
+  if(teamLogos[teamName]) return teamLogos[teamName];
+  // Try lowercase
+  if(teamLogos[teamName.toLowerCase()]) return teamLogos[teamName.toLowerCase()];
+  // Try trimmed
+  var trimmed = teamName.trim();
+  if(teamLogos[trimmed]) return teamLogos[trimmed];
+  // Try replacing spaces with underscores and vice versa
+  var underscored = teamName.replace(/\s+/g,'_');
+  if(teamLogos[underscored]) return teamLogos[underscored];
+  var spaced = teamName.replace(/_/g,' ');
+  if(teamLogos[spaced]) return teamLogos[spaced];
+  // Try case-insensitive search through all keys
+  var lowerName = teamName.toLowerCase().trim();
+  var keys = Object.keys(teamLogos);
+  for(var i=0;i<keys.length;i++){
+    if(keys[i].toLowerCase().trim() === lowerName){
+      return teamLogos[keys[i]];
+    }
+  }
+  return null;
+}
+
+let importStaging = [];
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+async function adminLogin() {
+  const user=v('a-user'), pass=v('a-pass');
+  if (user!==ADMIN_U||pass!==ADMIN_P) { document.getElementById('err-msg').style.display='block'; document.getElementById('a-pass').value=''; return; }
+  document.getElementById('err-msg').style.display='none';
+  try {
+    const res  = await fetch(API+'/api/admin/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+    const data = await res.json();
+    if (!res.ok) { toast(data.error||'Server error'); return; }
+    S = { roomName:data.roomName, roomPassword:data.roomPassword, adminToken:data.adminToken, cameras:data.cameras||[] };
+    showDashboard(); connectWS(); toast('Welcome, '+user+'!');
+  } catch { toast('Cannot reach server'); }
+}
+
+function showDashboard() {
+  document.getElementById('vl').classList.remove('active');
+  document.getElementById('vd').classList.add('active');
+  document.getElementById('h-pill').style.display='inline-flex';
+  document.getElementById('h-logout').style.display='inline-block';
+  document.getElementById('d-room').textContent=S.roomName;
+  updateBooyahUrl();
+  Promise.all([fetchServerLogos(), fetchPlayerPhotos()]).then(function(){
+    console.log('[LOGOS] Loaded:', Object.keys(teamLogos));
+    console.log('[TEAMS] Camera teams:', [...new Set(S.cameras.map(function(c){return c.team;}).filter(Boolean))]);
+    renderLogosGrid(); renderCameras(); renderTeams(); updateSelects(); loadSpectStatus();
+  });
+}
+
+function logout() {
+  peerConns.forEach(({pc})=>pc&&pc.close()); peerConns.clear(); onlinePlayers.clear();
+  audioAnalysers.forEach(a=>{cancelAnimationFrame(a.animId);a.ctx.close();}); audioAnalysers.clear();
+  if(ws)ws.close(); ws=null;
+  S={roomName:'',roomPassword:'',adminToken:'',cameras:[]};
+  document.getElementById('vd').classList.remove('active');
+  document.getElementById('vl').classList.add('active');
+  document.getElementById('h-pill').style.display='none';
+  document.getElementById('h-logout').style.display='none';
+  document.getElementById('a-user').value=''; document.getElementById('a-pass').value='';
+  toast('Logged out');
+}
+
+// ── WS ────────────────────────────────────────────────────────────────────────
+function connectWS() {
+  ws=new WebSocket(WS_URL);
+  ws.onopen=()=>wsSend({type:'register-admin',roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken});
+  ws.onmessage=async(e)=>{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='admin-registered'){ toast('📡 Watching for players…'); msg.onlinePlayers?.forEach(uid=>{const c=S.cameras.find(x=>x.uid===uid);if(c)playerCameOnline(uid,c.playerName,c.slot,c.team);}); }
+    if(msg.type==='player-joined'){playerCameOnline(msg.uid,msg.playerName,msg.slot,msg.team);toast('🟢 '+msg.playerName);}
+    if(msg.type==='player-left'){const c=S.cameras.find(x=>x.uid===msg.uid);playerWentOffline(msg.uid);toast('🔴 '+(c?.playerName||msg.uid));}
+    if(msg.type==='offer') await handleOffer(msg.uid,msg.sdp);
+    if(msg.type==='ice'&&msg.from==='player'){const conn=peerConns.get(msg.uid);if(conn?.pc)try{await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch{}}
+    if(msg.type==='error')toast('WS: '+msg.message);
+    if(msg.type==='booyah-detected'){
+      document.getElementById('booyah-badge').className='live-badge';
+      document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH: '+esc(msg.teamName||'');
+      toast('🏆 BOOYAH: '+(msg.teamName||''));
+    }
+  };
+  ws.onclose=()=>toast('WS disconnected');
+}
+
+// ── WebRTC ────────────────────────────────────────────────────────────────────
+async function handleOffer(uid,sdp) {
+  if(peerConns.has(uid))peerConns.get(uid).pc.close();
+  const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+  peerConns.set(uid,{pc,stream:null});
+  pc.ontrack=(event)=>{
+    const conn=peerConns.get(uid); if(conn)conn.stream=event.streams[0];
+    const vid=document.getElementById('vid-'+uid);
+    if(vid){
+      vid.srcObject=event.streams[0];
+      const w=document.getElementById('wait-'+uid);
+      if(w) w.style.display='none'; // hides photo fallback too
+    }
+    updateFeedStatus(uid,'live'); startAudioMeter(uid,event.streams[0]); renderFeeds();
+  };
+  pc.onicecandidate=({candidate})=>{if(candidate)wsSend({type:'ice',roomName:S.roomName,roomPassword:S.roomPassword,uid,candidate,from:'admin'});};
+  pc.onconnectionstatechange=()=>{
+    updateFeedStatus(uid,pc.connectionState);
+    if(pc.connectionState==='failed'||pc.connectionState==='disconnected')playerWentOffline(uid);
+  };
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const ans=await pc.createAnswer(); await pc.setLocalDescription(ans);
+  wsSend({type:'answer',roomName:S.roomName,roomPassword:S.roomPassword,uid,sdp:pc.localDescription});
+}
+
+// ── Audio Meter ───────────────────────────────────────────────────────────────
+function startAudioMeter(uid,stream) {
+  try {
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const src=ctx.createMediaStreamSource(stream);
+    const an=ctx.createAnalyser(); an.fftSize=256; an.smoothingTimeConstant=0.6;
+    src.connect(an);
+    const data=new Uint8Array(an.frequencyBinCount);
+    const chunk=Math.floor(data.length/8);
+    function draw(){
+      an.getByteFrequencyData(data);
+      for(let i=0;i<8;i++){
+        let s=0; for(let j=0;j<chunk;j++)s+=data[i*chunk+j];
+        const pct=(s/chunk)/255, h=Math.max(2,Math.round(pct*12));
+        const bar=document.getElementById('ab'+i+'-'+uid);
+        if(bar){bar.style.height=h+'px';bar.style.background=pct>.6?'var(--red)':pct>.3?'var(--green)':pct>.05?'var(--accent)':'var(--border)';}
+      }
+      const ref=audioAnalysers.get(uid); if(ref)ref.animId=requestAnimationFrame(draw);
+    }
+    const animId=requestAnimationFrame(draw);
+    audioAnalysers.set(uid,{ctx,analyser:an,animId});
+  }catch(e){console.warn(e);}
+}
+function stopAudioMeter(uid){
+  const a=audioAnalysers.get(uid); if(!a)return;
+  cancelAnimationFrame(a.animId); a.ctx.close(); audioAnalysers.delete(uid);
+  for(let i=0;i<8;i++){const b=document.getElementById('ab'+i+'-'+uid);if(b){b.style.height='2px';b.style.background='var(--border)';}}
+}
+
+// ── Player online/offline ─────────────────────────────────────────────────────
+function playerCameOnline(uid,playerName,slot,team){
+  onlinePlayers.set(uid,{playerName,slot,team});
+  renderOnlineList(); renderCameras(); renderTeams();
+  ensureFeedCard(uid,playerName,slot,team);
+  document.getElementById('d-online').textContent=onlinePlayers.size;
+}
+function playerWentOffline(uid){
+  onlinePlayers.delete(uid);
+  if(peerConns.has(uid)){peerConns.get(uid).pc.close();peerConns.delete(uid);}
+  stopAudioMeter(uid);
+  // Clear video and show photo fallback
+  var vid = document.getElementById('vid-'+uid);
+  if(vid) vid.srcObject = null;
+  var wait = document.getElementById('wait-'+uid);
+  if(wait) wait.style.display = 'flex';
+  renderOnlineList(); renderCameras(); renderTeams(); renderFeeds();
+  document.getElementById('d-online').textContent=onlinePlayers.size;
+}
+
+// ── Feed Cards ────────────────────────────────────────────────────────────────
+const feedCardsData = new Map(); // uid -> { playerName, slot, team }
+
+function ensureFeedCard(uid,playerName,slot,team){
+  feedCardsData.set(uid,{playerName,slot,team});
+  renderFeeds();
+}
+function removeFeedCard(uid){
+  feedCardsData.delete(uid);
+  // remove from DOM
+  const c=document.getElementById('feed-'+uid); if(c)c.remove();
+  renderFeeds();
+}
+
+function renderFeeds(){
+  const grid=document.getElementById('feeds-grid');
+  const search=(document.getElementById('feed-search')?.value||'').toLowerCase();
+  const teamF=document.getElementById('feed-team-filter')?.value||'';
+  const statF=document.getElementById('feed-status-filter')?.value||'';
+
+  // filter
+  let cards=[...feedCardsData.entries()];
+  if(search) cards=cards.filter(([uid,d])=>d.playerName.toLowerCase().includes(search)||uid.includes(search));
+  if(teamF)  cards=cards.filter(([,d])=>d.team===teamF);
+  if(statF==='live') cards=cards.filter(([uid])=>onlinePlayers.has(uid));
+
+  document.getElementById('feeds-count').textContent=cards.length+' feed'+(cards.length!==1?'s':'');
+
+  if(!cards.length){
+    grid.innerHTML='<div class="no-feeds"><div class="icon">📡</div><p>'+(feedCardsData.size?'No feeds match filter.':'No live feeds yet.')+'</p></div>';
+    return;
+  }
+
+  // group by team
+  const groups=new Map();
+  cards.forEach(([uid,d])=>{
+    const t=d.team||'(No Team)';
+    if(!groups.has(t))groups.set(t,[]);
+    groups.get(t).push([uid,d]);
+  });
+
+  grid.innerHTML='';
+  groups.forEach((members,teamName)=>{
+    // team group label
+    const lbl=document.createElement('div');
+    lbl.className='team-group-label';
+    const logo=getTeamLogo(teamName);
+    lbl.innerHTML=(logo?`<img src="${logo}" style="width:16px;height:16px;object-fit:contain;border-radius:2px;">`:'')+'<span>'+esc(teamName)+'</span>';
+    grid.appendChild(lbl);
+
+    members.forEach(([uid,d])=>{
+      let card=document.getElementById('feed-'+uid);
+      if(!card){
+        card=document.createElement('div');
+        card.className='feed-card'; card.id='feed-'+uid;
+        const logoHtml=d.team&&getTeamLogo(d.team)?`<img class="feed-tlogo" src="${teamLogos[d.team]}">`:`<div class="feed-tlogo-ph">🏆</div>`;
+        card.innerHTML=`
+          <div class="feed-header">
+            ${logoHtml}
+            <div class="feed-info">
+              <div class="feed-name">${esc(d.playerName)}</div>
+              <div class="feed-team">${d.team?esc(d.team):'—'}</div>
+            </div>
+            <div class="feed-meta">
+              <span class="offline-badge" id="fstat-${uid}">WAITING</span>
+              <span style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">S${d.slot}</span>
+            </div>
+          </div>
+          <div class="feed-video-wrap">
+            <video id="vid-${uid}" autoplay playsinline></video>
+            <div class="feed-waiting" id="wait-${uid}">
+              ${getPlayerPhoto(uid, d.playerName)
+                ? '<img src="'+getPlayerPhoto(uid, d.playerName)+'" style="width:100%;height:100%;object-fit:cover;opacity:0.6;position:absolute;inset:0;">'
+                : '<div class="icon">📡</div><p>Waiting…</p>'
+              }
+            </div>
+          </div>
+          <div class="feed-footer">
+            <span class="feed-uid">${esc(uid)}</span>
+            <div class="audio-wrap">
+              <span class="audio-label">MIC</span>
+              <div class="audio-bars">${[0,1,2,3,4,5,6,7].map(i=>`<div class="audio-bar" id="ab${i}-${uid}" style="height:2px"></div>`).join('')}</div>
+            </div>
+          </div>`;
+      }
+      grid.appendChild(card);
+      // re-attach stream if exists
+      const conn=peerConns.get(uid);
+      if(conn?.stream){
+        const vid=document.getElementById('vid-'+uid);
+        if(vid&&!vid.srcObject){
+          vid.srcObject=conn.stream;
+          const w=document.getElementById('wait-'+uid);if(w)w.style.display='none';
+        }
+      }
+    });
+  });
+}
+
+function updateFeedStatus(uid,state){
+  const el=document.getElementById('fstat-'+uid); if(!el)return;
+  if(state==='live'||state==='connected'){el.className='live-badge';el.innerHTML='<span class="d"></span>LIVE';}
+  else{el.className='offline-badge';el.textContent=state.toUpperCase();}
+}
+
+// ── Logo Upload ───────────────────────────────────────────────────────────────
+async function loadLogos(input){
+  const files=Array.from(input.files); let n=0;
+  for(const f of files){
+    const name=f.name.replace(/[.][^.]+$/,'');
+    await new Promise(resolve=>{
+      const r=new FileReader();
+      r.onload=e=>{
+        teamLogos[name]=e.target.result;
+        n++;
+        resolve();
+      };
+      r.readAsDataURL(f);
+    });
+  }
+  localStorage.setItem('upthrust_logos',JSON.stringify(teamLogos));
+  // Also re-fetch server logos to catch any new files
+  await fetchServerLogos();
+  renderLogosGrid(); renderTeams(); renderCameras();
+  toast('✅ '+n+' logo(s) loaded');
+  input.value='';
+}
+function renderLogosGrid(){
+  var grid = document.getElementById('logos-grid');
+  if(!grid) return;
+  var entries = Object.entries(teamLogos);
+  if(!entries.length){
+    grid.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:8px">No logos loaded. Place PNG files in public/logos/TeamName.png or upload below.</div>';
+    return;
+  }
+  var html = '';
+  for(var i=0;i<entries.length;i++){
+    var name = entries[i][0];
+    var url  = entries[i][1];
+    var fromServer = (url.indexOf('/logos/') === 0);
+    var srcAttr = 'src="' + url + '"';
+    var badgeHtml = fromServer
+      ? '<span style="font-size:8px;color:var(--accent)"> F</span>'
+      : '<span style="font-size:8px;color:var(--accent2)"> U</span>';
+    var delHtml = fromServer ? '' : '<button class="ldel" id="del-logo-' + i + '">x</button>';
+    html += '<div class="logo-item">';
+    html += '<img ' + srcAttr + ' style="width:44px;height:44px;object-fit:contain;" />';
+    html += '<div class="lname">' + esc(name) + badgeHtml + '</div>';
+    html += delHtml;
+    html += '</div>';
+  }
+  grid.innerHTML = html;
+  // Attach delete handlers after render
+  for(var j=0;j<entries.length;j++){
+    var btn = document.getElementById('del-logo-' + j);
+    if(btn){
+      (function(n){ btn.onclick = function(){ deleteLogo(n); }; })(entries[j][0]);
+    }
+  }
+}
+
+function deleteLogo(name){delete teamLogos[name];localStorage.setItem('upthrust_logos',JSON.stringify(teamLogos));renderLogosGrid();toast('Removed: '+name);}
+
+// ── CSV Import ────────────────────────────────────────────────────────────────
+function loadCSV(input){
+  const file=input.files[0]; if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const lines=e.target.result.trim().split('\n').filter(l=>l.trim());
+    importStaging=[];
+    lines.forEach((line,i)=>{
+      const p=line.split(',').map(x=>x.trim());
+      if(p.length<3)return;
+      let team='',name='',uid='',slot;
+      if(p.length>=4){[team,name,uid]=p;slot=parseInt(p[3])||i+1;}
+      else{[name,uid]=p;slot=parseInt(p[2])||i+1;}
+      if(name&&uid)importStaging.push({team,name,uid,slot});
+    });
+    renderImportPreview(); input.value='';
+  };
+  r.readAsText(file);
+}
+
+function renderImportPreview(){
+  const el=document.getElementById('csv-preview');
+  const btns=document.getElementById('imp-btns');
+  const stats=document.getElementById('imp-stats');
+  if(!importStaging.length){el.innerHTML='<div style="color:var(--muted);font-size:10px;text-align:center;padding:20px">No valid rows</div>';btns.style.display='none';stats.style.display='none';return;}
+
+  const teams=new Set(importStaging.map(p=>p.team).filter(Boolean));
+  const matched=importStaging.filter(p=>p.team&&teamLogos[p.team]).length;
+  document.getElementById('prev-count').textContent=importStaging.length+' players';
+  document.getElementById('ist-players').textContent=importStaging.length;
+  document.getElementById('ist-teams').textContent=teams.size;
+  document.getElementById('ist-logos').textContent=matched;
+  stats.style.display='flex'; btns.style.display='flex';
+
+  el.innerHTML=`<div class="prev-header"><span>LOGO</span><span>PLAYER</span><span>TEAM</span><span>UID</span><span>SL</span></div>`+
+    importStaging.map(p=>{
+      const logo=p.team&&getTeamLogo(p.team);
+      const logoEl=logo?`<img class="prev-logo" src="${logo}">`:`<div class="prev-logo-ph">🏆</div>`;
+      return `<div class="prev-row">${logoEl}<span class="prev-name">${esc(p.name)}</span><span class="prev-team">${esc(p.team||'—')}</span><span class="prev-uid">${esc(p.uid)}</span><span class="prev-slot">${p.slot}</span></div>`;
+    }).join('');
+}
+
+async function importPlayers(){
+  if(!importStaging.length){toast('Nothing to import');return;}
+  toast('Importing '+importStaging.length+' players…');
+  try{
+    const res=await fetch(API+'/api/room/camera/bulk-add',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken,players:importStaging.map(p=>({playerName:p.name,uid:p.uid,slot:p.slot,team:p.team}))}),
+    });
+    const data=await res.json();
+    if(res.ok){S.cameras=data.cameras;toast('✅ Imported '+data.added+' new · '+data.total+' total');}
+    else toast(data.error||'Import failed');
+  }catch{
+    // local fallback
+    importStaging.forEach(p=>{
+      const ex=S.cameras.findIndex(c=>c.uid===p.uid);
+      const cam={playerName:p.name,uid:p.uid,slot:p.slot,team:p.team};
+      if(ex>=0)S.cameras[ex]=cam;else S.cameras.push(cam);
+    });
+    toast('✅ Imported '+importStaging.length+' (offline mode)');
+  }
+  renderCameras();renderTeams();updateSelects();
+  document.getElementById('d-reg').textContent=S.cameras.length;
+  clearImport();
+}
+
+function clearImport(){
+  importStaging=[];
+  document.getElementById('csv-preview').innerHTML='<div style="color:var(--muted);font-size:10px;text-align:center;padding:20px">No CSV loaded</div>';
+  document.getElementById('imp-btns').style.display='none';
+  document.getElementById('imp-stats').style.display='none';
+  document.getElementById('prev-count').textContent='';
+}
+
+function importJSON(){
+  const raw=document.getElementById('json-input').value.trim();
+  try{
+    const arr=JSON.parse(raw);
+    if(!Array.isArray(arr))throw new Error('Must be array');
+    importStaging=arr.map((p,i)=>({team:p.team||p.teamName||'',name:p.name||p.playerName||p.player_name||'',uid:p.uid||p.UID||'',slot:p.slot||i+1})).filter(p=>p.name&&p.uid);
+    renderImportPreview();
+    toast(importStaging.length+' players ready');
+  }catch(e){toast('JSON error: '+e.message);}
+}
+
+// ── Teams ─────────────────────────────────────────────────────────────────────
+function renderTeams(){
+  const map=new Map();
+  S.cameras.forEach(c=>{const t=c.team||'(No Team)';if(!map.has(t))map.set(t,[]);map.get(t).push(c);});
+  document.getElementById('d-teams').textContent=map.size;
+  document.getElementById('teams-badge').textContent=map.size+' team'+(map.size!==1?'s':'')+' · '+S.cameras.length+' players';
+  const grid=document.getElementById('teams-grid');
+  if(!map.size){grid.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:30px;grid-column:1/-1">No teams yet.</div>';return;}
+  grid.innerHTML='';
+  map.forEach((players,teamName)=>{
+    const logo=getTeamLogo(teamName);
+    const liveCount=[...players].filter(p=>onlinePlayers.has(p.uid)).length;
+    const card=document.createElement('div'); card.className='team-card';
+    // Build logo HTML
+    var logoHtml = logo
+      ? '<img src="'+logo+'" alt="'+esc(teamName)+'" style="width:100%;height:100%;object-fit:contain;">'
+      : '<span style="font-size:22px;opacity:.3">🏆</span>';
+    // Build players HTML
+    var playersHtml = '';
+    players.forEach(function(p){
+      var dot = onlinePlayers.has(p.uid)
+        ? '<span class="tp-live"></span>'
+        : '<span class="tp-offline"></span>';
+      playersHtml += '<div class="tp-row"><span class="tp-name">'+esc(p.playerName)+'</span><span class="tp-uid">'+esc(p.uid)+'</span>'+dot+'</div>';
+    });
+    var liveTag = liveCount ? '<span class="tc-live">'+liveCount+' LIVE</span>' : '';
+    card.innerHTML =
+      '<div class="tc-head">'+
+        '<div class="tc-logo">'+logoHtml+'</div>'+
+        '<div class="tc-info">'+
+          '<div class="tn">'+esc(teamName)+'</div>'+
+          '<div class="tc">'+players.length+' players</div>'+
+        '</div>'+
+        liveTag+
+      '</div>'+
+      '<div class="tc-players">'+playersHtml+'</div>';
+    grid.appendChild(card);
+  });
+}
+
+// ── Cameras Table ─────────────────────────────────────────────────────────────
+async function addCam(){
+  const name=v('cn'),uid=v('cu'),slot=parseInt(v('cs')),team=document.getElementById('ct').value;
+  if(!name||!uid){toast('Name and UID required');return;}
+  try{
+    const res=await fetch(API+'/api/room/camera/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken,playerName:name,uid,slot,team})});
+    const data=await res.json();
+    if(!res.ok){toast(data.error);return;}
+    S.cameras=data.cameras;
+  }catch{const ex=S.cameras.findIndex(c=>c.uid===uid);const cam={playerName:name,uid,slot,team};if(ex>=0)S.cameras[ex]=cam;else S.cameras.push(cam);}
+  renderCameras();renderTeams();updateSelects();
+  ['cn','cu'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('d-reg').textContent=S.cameras.length;
+  toast('Added: '+name);
+}
+
+async function removeCam(uid){
+  try{await fetch(`${API}/api/room/camera/${uid}?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`,{method:'DELETE'});}catch{}
+  S.cameras=S.cameras.filter(c=>c.uid!==uid);
+  renderCameras();renderTeams();updateSelects();
+  document.getElementById('d-reg').textContent=S.cameras.length;
+  toast('Removed');
+}
+
+async function clearAllCams(){
+  if(!confirm('Clear ALL '+S.cameras.length+' players?'))return;
+  try{await fetch(`${API}/api/room/cameras/all?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`,{method:'DELETE'});}catch{}
+  S.cameras=[];
+  renderCameras();renderTeams();updateSelects();
+  document.getElementById('d-reg').textContent=0;
+  toast('All players cleared');
+}
+
+function renderCameras(){
+  const search=(document.getElementById('cam-search')?.value||'').toLowerCase();
+  const teamF=document.getElementById('cam-team-filter')?.value||'';
+  const statF=document.getElementById('cam-status-filter')?.value||'';
+  let cams=[...S.cameras];
+  if(search)cams=cams.filter(c=>c.playerName.toLowerCase().includes(search)||c.uid.includes(search));
+  if(teamF)cams=cams.filter(c=>c.team===teamF);
+  if(statF==='live')cams=cams.filter(c=>onlinePlayers.has(c.uid));
+  if(statF==='offline')cams=cams.filter(c=>!onlinePlayers.has(c.uid));
+  document.getElementById('cam-badge').textContent=S.cameras.length+' total';
+  document.getElementById('cam-filtered-count').textContent='showing '+cams.length;
+  const tb=document.getElementById('cam-tbody');
+  if(!cams.length){tb.innerHTML='<tr class="empty-r"><td colspan="6">No players match.</td></tr>';return;}
+  tb.innerHTML=cams.map(c=>{
+    const on=onlinePlayers.has(c.uid);
+    const badge=on?'<span class="live-badge"><span class="d"></span>LIVE</span>':'<span class="offline-badge">OFF</span>';
+    const logo = c.team && getTeamLogo(c.team) ? '<img class="tlogo-sm" src="'+getTeamLogo(c.team)+'">' : '';
+    const tb2=c.team?`${logo}<span class="team-badge">${esc(c.team)}</span>`:'—';
+    return `<tr><td><span class="st">S${c.slot}</span></td><td>${tb2}</td><td><strong>${esc(c.playerName)}</strong></td><td class="uc">${esc(c.uid)}</td><td>${badge}</td><td><button class="bs brm" onclick="removeCam('${esc(c.uid)}')">✕</button></td></tr>`;
+  }).join('');
+}
+
+function renderOnlineList(){
+  const el=document.getElementById('online-list');
+  if(!onlinePlayers.size){el.innerHTML='<div style="font-size:10px;color:var(--muted);padding:3px 0">No players online</div>';return;}
+  el.innerHTML='';
+  onlinePlayers.forEach(({playerName,slot},uid)=>{
+    const item=document.createElement('div');item.className='online-item';item.onclick=()=>aTab('feeds');
+    item.innerHTML=`<span class="live-dot"></span><span class="pname">${esc(playerName)}</span><span class="slot-t">S${slot}</span>`;
+    el.appendChild(item);
+  });
+}
+
+function updateSelects(){
+  const teams=[...new Set(S.cameras.map(c=>c.team).filter(Boolean))].sort();
+  const opts='<option value="">All Teams</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  ['cam-team-filter','feed-team-filter'].forEach(id=>{const el=document.getElementById(id);if(el){const cur=el.value;el.innerHTML=opts;el.value=cur;}});
+  const ct=document.getElementById('ct');
+  if(ct){const cur=ct.value;ct.innerHTML='<option value="">— No Team —</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');ct.value=cur;}
+}
+
+async function refreshAll(){
+  try{const res=await fetch(`${API}/api/room/cameras?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`);const data=await res.json();if(res.ok){S.cameras=data.cameras;renderCameras();renderTeams();updateSelects();toast('Refreshed');}else toast(data.error);}catch{toast('Cannot reach server');}
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+function dzOver(e,id){e.preventDefault();document.getElementById(id)?.classList.add('drag-over');}
+function dzLeave(id){document.getElementById(id)?.classList.remove('drag-over');}
+function dzDrop(e,type){
+  e.preventDefault();dzLeave(type==='csv'?'csv-drop':'logo-drop');
+  const files=Array.from(e.dataTransfer.files);
+  if(type==='csv'){const f=files.find(f=>f.name.endsWith('.csv')||f.name.endsWith('.txt'));if(f){const inp=document.getElementById('csv-file');const dt=new DataTransfer();dt.items.add(f);inp.files=dt.files;loadCSV(inp);}else toast('Drop a .csv file');}
+  else{const imgs=files.filter(f=>f.type.startsWith('image/'));if(imgs.length){const inp=document.getElementById('logo-files');const dt=new DataTransfer();imgs.forEach(f=>dt.items.add(f));inp.files=dt.files;loadLogos(inp);}else toast('Drop image files');}
+}
+
+// ── Tab & Helpers ─────────────────────────────────────────────────────────────
+function aTab(name){
+  const names=['import','teams','cams','feeds','spect'];
+  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',names[i]===name));
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.id==='t-'+name));
+}
+// ── Spectator / OBS system ───────────────────────────────────────────────────
+// spectSlots: slot 1-6 each has { customId, uid }
+// customId = the actual spectator PC ID entered by admin (e.g. "PC1", "OBS_LEFT")
+// uid = player UID currently assigned to this slot
+const spectSlots = JSON.parse(localStorage.getItem('upthrust_spect_slots') || 'null') || [
+  {slot:1, customId:'SPECT1', uid:''},
+  {slot:2, customId:'SPECT2', uid:''},
+  {slot:3, customId:'SPECT3', uid:''},
+  {slot:4, customId:'SPECT4', uid:''},
+  {slot:5, customId:'SPECT5', uid:''},
+  {slot:6, customId:'SPECT6', uid:''},
+];
+
+function saveSpectSlots() {
+  localStorage.setItem('upthrust_spect_slots', JSON.stringify(spectSlots));
+}
+
+function renderSpectGrid() {
+  const grid = document.getElementById('spect-grid');
+  if (!grid) return;
+  const base = location.origin;
+  grid.innerHTML = '';
+
+  spectSlots.forEach((slot, idx) => {
+    const obsUrl = `${base}/spect${slot.slot}`;
+    const uid    = slot.uid || '';
+    const cam    = uid ? S.cameras.find(c => c.uid === uid) : null;
+    const isLive = uid && onlinePlayers.has(uid);
+
+    const row = document.createElement('div');
+    row.className = 'spect-row';
+    row.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:90px">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Spect ${slot.slot} ID</div>
+        <input
+          class="spect-id-input"
+          id="spect-cid-${slot.slot}"
+          value="${esc(slot.customId)}"
+          placeholder="e.g. PC1"
+          onchange="updateSpectId(${slot.slot}, this.value)"
+          title="Custom name for this spectator PC"
+        />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">OBS Browser Source URL</div>
+        <div class="spect-url" onclick="copyText('${esc(obsUrl)}')" title="Click to copy">${esc(obsUrl)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:160px">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Assign Player</div>
+        <select class="spect-uid-sel" id="spect-sel-${slot.slot}">
+          <option value="">— Unassign —</option>
+          ${S.cameras.map(c2 => `<option value="${esc(c2.uid)}" ${c2.uid===uid?'selected':''}>${esc(c2.playerName)} · ${esc(c2.uid)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:70px">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Status</div>
+        <div style="font-size:10px;padding-top:2px">
+          ${cam
+            ? `<strong style="color:var(--text)">${esc(cam.playerName)}</strong> ${isLive ? '<span class="spect-live"><span class="d"></span>LIVE</span>' : '<span class="offline-badge">OFF</span>'}`
+            : `<span style="color:var(--muted);font-size:10px">—</span>`
+          }
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:9px;color:transparent">.</div>
+        <button class="btn-spect-set" onclick="setSpect(${slot.slot})">SET</button>
+      </div>
+    `;
+    grid.appendChild(row);
+  });
+}
+
+function updateSpectId(slotNum, value) {
+  const slot = spectSlots.find(s => s.slot === slotNum);
+  if (slot) { slot.customId = value.trim() || ('SPECT' + slotNum); saveSpectSlots(); }
+}
+
+async function setSpect(slotNum) {
+  const slot = spectSlots.find(s => s.slot === slotNum);
+  if (!slot) return;
+  const sel = document.getElementById('spect-sel-' + slotNum);
+  const uid = sel ? sel.value : '';
+  slot.uid = uid;
+  saveSpectSlots();
+
+  try {
+    const res = await fetch(API + '/api/spect/set', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roomName: S.roomName, roomPassword: S.roomPassword,
+        adminToken: S.adminToken, spectId: slot.customId, uid: uid || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast(data.error);
+  } catch {}
+
+  renderSpectGrid();
+  const cam = uid ? S.cameras.find(c => c.uid === uid) : null;
+  toast(uid ? `Spect ${slotNum} (${slot.customId}) → ${cam?.playerName || uid}` : `Spect ${slotNum} cleared`);
+}
+
+async function loadSpectStatus() {
+  try {
+    const res  = await fetch(`${API}/api/spect/status?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`);
+    const data = await res.json();
+    if (res.ok) {
+      Object.entries(data.spectators).forEach(([sid, uid]) => {
+        const slot = spectSlots.find(s => s.customId === sid || s.slot === parseInt(sid));
+        if (slot) slot.uid = uid;
+      });
+    }
+  } catch {}
+  renderSpectGrid();
+  loadFFConfig();
+}
+
+// ── FF API auto-tracking ──────────────────────────────────────────────────────
+// WS listener for auto spect updates from server
+function handleSpectAutoUpdate(msg) {
+  if (msg.type === 'spect-update-all') {
+    // Server detected observer change — update slot UIDs
+    Object.entries(msg.spectators).forEach(([slotKey, uid]) => {
+      const slot = spectSlots.find(s => s.slot === parseInt(slotKey));
+      if (slot) { slot.uid = uid; saveSpectSlots(); }
+    });
+    renderSpectGrid();
+    addPollLog('↺ Auto-updated: ' + JSON.stringify(msg.spectators));
+  }
+}
+
+// Hook into existing WS message handler
+const _origWsMsg = ws ? ws.onmessage : null;
+function patchWsForSpect() {
+  if (!ws) return;
+  const orig = ws.onmessage;
+  ws.onmessage = async (e) => {
+    const msg = JSON.parse(e.data);
+    handleSpectAutoUpdate(msg);
+    if (orig) orig.call(ws, e);
+  };
+}
+
+async function startFFPolling() {
+  const matchId   = v('ff-match-id');
+  const clientId  = v('ff-client-id');
+  if (!matchId) { toast('Enter Match ID first'); return; }
+
+  const observers = [];
+  for (let i = 1; i <= 6; i++) {
+    const uid = document.getElementById('obs-uid-' + i)?.value.trim();
+    if (uid) observers.push({ slot: i, observerUid: uid });
+  }
+  if (!observers.length) { toast('Enter at least 1 Observer UID'); return; }
+
+  // Save to localStorage
+  localStorage.setItem('upthrust_ff_config', JSON.stringify({ matchId, clientId, observers }));
+
+  try {
+    const res  = await fetch(API + '/api/spect/config', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roomName: S.roomName, roomPassword: S.roomPassword, adminToken: S.adminToken,
+        matchId, spectObservers: observers,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setPollBadge(true);
+      addPollLog('✅ Auto-tracking started — Match: ' + matchId + ' · ' + observers.length + ' observers');
+      toast('✅ FF auto-tracking started!');
+      patchWsForSpect();
+    } else toast(data.error || 'Failed');
+  } catch { toast('Cannot reach server'); }
+}
+
+async function stopFFPolling() {
+  try {
+    await fetch(API + '/api/spect/config', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roomName: S.roomName, roomPassword: S.roomPassword, adminToken: S.adminToken,
+        matchId: '', spectObservers: [],
+      }),
+    });
+  } catch {}
+  setPollBadge(false);
+  addPollLog('■ Polling stopped');
+  toast('Polling stopped');
+}
+
+async function loadFFConfig() {
+  // Load from localStorage first
+  const saved = localStorage.getItem('upthrust_ff_config');
+  if (saved) {
+    try {
+      const cfg = JSON.parse(saved);
+      if (cfg.matchId) document.getElementById('ff-match-id').value = cfg.matchId;
+      if (cfg.clientId) document.getElementById('ff-client-id').value = cfg.clientId;
+      cfg.observers?.forEach(o => {
+        const el = document.getElementById('obs-uid-' + o.slot);
+        if (el) el.value = o.observerUid;
+      });
+    } catch {}
+  }
+  // Also check server status
+  try {
+    const res  = await fetch(`${API}/api/spect/config?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`);
+    const data = await res.json();
+    if (res.ok) {
+      setPollBadge(data.polling);
+      if (data.polling) addPollLog('▶ Polling active — Match: ' + data.matchId);
+    }
+  } catch {}
+}
+
+function setPollBadge(on) {
+  const el = document.getElementById('poll-badge');
+  if (!el) return;
+  if (on) { el.className = 'live-badge'; el.innerHTML = '<span class="d"></span>POLLING LIVE'; }
+  else    { el.className = 'offline-badge'; el.textContent = 'POLLING OFF'; }
+}
+
+function addPollLog(msg) {
+  const el = document.getElementById('poll-log');
+  if (!el) return;
+  el.style.display = 'block';
+  const ts = new Date().toLocaleTimeString();
+  el.innerHTML = `[${ts}] ${msg}
+` + el.innerHTML;
+}
+
+// ── Booyah cam helpers ────────────────────────────────────────────────────────
+function updateBooyahUrl() {
+  var el = document.getElementById('booyah-url');
+  if(el && S.roomName) {
+    var url = location.origin + '/booyah?room=' + encodeURIComponent(S.roomName) + '&pass=' + encodeURIComponent(S.roomPassword);
+    el.textContent = url;
+    el.onclick = function(){ copyText(url); };
+  }
+}
+
+async function testBooyah() {
+  // Send a fake booyah event for testing with first 4 registered players
+  var testPlayers = S.cameras.slice(0,4).map(function(c){ return { uid:c.uid, playerName:c.playerName }; });
+  var teamName    = testPlayers.length && S.cameras[0].team ? S.cameras[0].team : 'TEST TEAM';
+  wsSend({ type:'test-booyah', roomName:S.roomName, roomPassword:S.roomPassword, adminToken:S.adminToken, teamName:teamName, players:testPlayers });
+  document.getElementById('booyah-badge').className='live-badge';
+  document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH LIVE';
+  toast('⚡ Test booyah sent!');
+}
+
+async function resetBooyah() {
+  wsSend({ type:'reset-booyah', roomName:S.roomName, roomPassword:S.roomPassword, adminToken:S.adminToken });
+  document.getElementById('booyah-badge').className='offline-badge';
+  document.getElementById('booyah-badge').textContent='WAITING';
+  toast('Booyah reset');
+}
+
+function wsSend(obj){if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj));}
+function v(id){return document.getElementById(id).value.trim();}
+function enc(s){return encodeURIComponent(s);}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+let _tt;
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3000);}
+
+renderLogosGrid();
+</script>
+</body>
+</html>
