@@ -239,6 +239,10 @@ function connectWS(){
       peers.clear();
       await showBooyah('', null, []);
     }
+    // Incoming offer from player — create answer (same as admin)
+    if(msg.type === 'offer'){
+      await handleOffer(msg.uid, msg.sdp);
+    }
     if(msg.type === 'answer'){
       const conn = peers.get(msg.uid);
       if(conn && conn.pc && conn.pc.signalingState !== 'stable')
@@ -347,12 +351,10 @@ async function showBooyah(teamName, teamLogoUrl, players){
   });
 }
 
-function requestStream(uid){
-  if(peers.has(uid)) return;
-  var iceServers = window.ICE_SERVERS || [
-    {urls:'stun:stun.l.google.com:19302'},
-    {urls:'stun:stun1.l.google.com:19302'}
-  ];
+// Handle incoming offer from player (booyah cam answers like admin)
+async function handleOffer(uid, sdp){
+  if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
+  var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
   var pc = new RTCPeerConnection({ iceServers: iceServers });
   peers.set(uid, {pc});
 
@@ -373,6 +375,20 @@ function requestStream(uid){
     if(ev.candidate) send({type:'ice',roomName:ROOM,roomPassword:PASS,uid:uid,candidate:ev.candidate,from:'booyah'});
   };
 
+  pc.onconnectionstatechange = function(){
+    if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
+      peers.delete(uid);
+    }
+  };
+
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  var answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  send({type:'answer',roomName:ROOM,roomPassword:PASS,uid:uid,sdp:pc.localDescription});
+}
+
+function requestStream(uid){
+  // Just notify server we want stream — server will trigger player to re-send offer
   send({type:'obs-request-stream',roomName:ROOM,roomPassword:PASS,uid:uid,spectId:'booyah'});
 }
 

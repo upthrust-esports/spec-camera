@@ -411,6 +411,16 @@ wss.on('connection', (ws) => {
       getPeers(key).set(wsId, ws);
       sendTo(ws, { type:'booyah-registered' });
       if (booyahDetected.has(key)) sendTo(ws, { type:'booyah-detected', teamName:'', players:[] });
+      // Send all stored offers so booyah cam connects immediately
+      if (latestOffers.has(key)) {
+        Object.entries(latestOffers.get(key)).forEach(([uid, sdp]) => {
+          sendTo(ws, { type:'offer', uid, sdp });
+        });
+      }
+      // Tell all players to re-send offer
+      getPeers(key).forEach((pws, id) => {
+        if (id.startsWith('uid:')) sendTo(pws, { type:'admin-joined' });
+      });
       return;
     }
 
@@ -456,6 +466,10 @@ wss.on('connection', (ws) => {
         broadcastAdmins(key, { type:'offer', uid: msg.uid, sdp: msg.sdp });
         if (!latestOffers.has(key)) latestOffers.set(key, {});
         latestOffers.get(key)[msg.uid] = msg.sdp;
+        // Also forward offer to booyah cam if connected
+        getPeers(key).forEach((pws, id) => {
+          if (id.startsWith('booyah:')) sendTo(pws, { type:'offer', uid: msg.uid, sdp: msg.sdp });
+        });
       }
       return;
     }
@@ -465,12 +479,23 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // Booyah cam ICE → player
+    if (msg.type === 'ice' && msg.from === 'booyah') {
+      const playerWs = getPeers(key).get('uid:' + msg.uid);
+      sendTo(playerWs, { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'admin' });
+      return;
+    }
+
     if (msg.type === 'ice') {
       if (msg.from === 'player') {
         broadcastAdmins(key, { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'player' });
         const s = spectators.get(key) || {};
         Object.entries(s).forEach(([spectId, watchedUid]) => {
           if (watchedUid === msg.uid) sendTo(getPeers(key).get('obs:' + spectId), { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'player' });
+        });
+        // Forward ICE to booyah cam too
+        getPeers(key).forEach((pws, id) => {
+          if (id.startsWith('booyah:')) sendTo(pws, { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'player' });
         });
       } else {
         sendTo(getPeers(key).get('uid:' + msg.uid), { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'admin' });
