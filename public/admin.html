@@ -1082,6 +1082,7 @@ async function addCam(){
 }
 
 async function removeCam(uid){
+  if(uid && uid.dataset) uid = uid.dataset.uid; // support element or string
   try{await fetch(`${API}/api/room/camera/${uid}?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`,{method:'DELETE'});}catch{}
   S.cameras=S.cameras.filter(c=>c.uid!==uid);
   renderCameras();renderTeams();updateSelects();
@@ -1115,9 +1116,10 @@ function renderCameras(){
     const on=onlinePlayers.has(c.uid);
     const badge=on?'<span class="live-badge"><span class="d"></span>LIVE</span>':'<span class="offline-badge">OFF</span>';
     const logo = c.team && getTeamLogo(c.team) ? '<img class="tlogo-sm" src="'+getTeamLogo(c.team)+'">' : '';
-    const tb2=c.team?`${logo}<span class="team-badge">${esc(c.team)}</span>`:'—';
-    const discBtn = onlinePlayers.has(c.uid) ? '<button class="btn-disc" onclick="disconnectPlayer(\'' + esc(c.uid) + '\')">✕ CAM</button>' : '';
-    return '<tr><td><span class="st">S'+c.slot+'</span></td><td>'+tb2+'</td><td><strong>'+esc(c.playerName)+'</strong></td><td class="uc">'+esc(c.uid)+'</td><td>'+badge+'</td><td style="display:flex;gap:4px"><button class="bs brm" onclick="removeCam(''+esc(c.uid)+'')">✕ DEL</button>'+discBtn+'</td></tr>';
+    const tb2=c.team?(logo+'<span class="team-badge">'+esc(c.team)+'</span>'):'—';
+    const discBtn = onlinePlayers.has(c.uid) ? '<button class="btn-disc" onclick="disconnectPlayer(this.dataset.uid)" data-uid="'+esc(c.uid)+'">✕ CAM</button>' : '';
+    var safeUid = esc(c.uid);
+    return '<tr><td><span class="st">S'+c.slot+'</span></td><td>'+tb2+'</td><td><strong>'+esc(c.playerName)+'</strong></td><td class="uc">'+safeUid+'</td><td>'+badge+'</td><td style="display:flex;gap:4px"><button class="bs brm" onclick="removeCam(this.dataset.uid)" data-uid="'+safeUid+'">✕ DEL</button>'+discBtn+'</td></tr>';
   }).join('');
 }
 
