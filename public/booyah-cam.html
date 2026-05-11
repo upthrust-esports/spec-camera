@@ -239,16 +239,15 @@ function connectWS(){
       peers.clear();
       await showBooyah('', null, []);
     }
-    // Incoming offer from player — create answer (same as admin)
+    // relay-offer from admin (admin forwards player stream to us)
+    if(msg.type === 'relay-offer'){
+      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId);
+    }
+    // Also handle direct offer (latestOffers fallback)
     if(msg.type === 'offer'){
-      await handleOffer(msg.uid, msg.sdp);
+      await handleRelayOffer(msg.uid, msg.sdp, 'booyah');
     }
-    if(msg.type === 'answer'){
-      const conn = peers.get(msg.uid);
-      if(conn && conn.pc && conn.pc.signalingState !== 'stable')
-        await conn.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-    }
-    if(msg.type === 'ice' && msg.from === 'player'){
+    if(msg.type === 'relay-ice'){
       const conn = peers.get(msg.uid);
       if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
     }
@@ -347,12 +346,12 @@ async function showBooyah(teamName, teamLogoUrl, players){
     grid.appendChild(cell);
 
     // Connect stream if uid exists
-    if(uid) requestStream(uid);
+    // stream will arrive via relay-offer from admin
   });
 }
 
-// Handle incoming offer from player (booyah cam answers like admin)
-async function handleOffer(uid, sdp){
+// Handle relay-offer from admin (admin is forwarding player stream to us)
+async function handleRelayOffer(uid, sdp, viewerId){
   if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
   var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
   var pc = new RTCPeerConnection({ iceServers: iceServers });
@@ -369,13 +368,19 @@ async function handleOffer(uid, sdp){
       var ld = document.getElementById('bld-'+uid);
       if(ld) ld.classList.add('on');
     }
+    console.log('[BOOYAH] Stream received for uid:', uid);
   };
 
   pc.onicecandidate = function(ev){
-    if(ev.candidate) send({type:'ice',roomName:ROOM,roomPassword:PASS,uid:uid,candidate:ev.candidate,from:'booyah'});
+    if(ev.candidate) send({
+      type:'relay-ice-back',
+      roomName:ROOM, roomPassword:PASS,
+      uid:uid, candidate:ev.candidate, viewerId: viewerId||'booyah'
+    });
   };
 
   pc.onconnectionstatechange = function(){
+    console.log('[BOOYAH PC '+uid+']', pc.connectionState);
     if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
       peers.delete(uid);
     }
@@ -384,13 +389,15 @@ async function handleOffer(uid, sdp){
   await pc.setRemoteDescription(new RTCSessionDescription(sdp));
   var answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
-  send({type:'answer',roomName:ROOM,roomPassword:PASS,uid:uid,sdp:pc.localDescription});
+  send({
+    type:'relay-answer',
+    roomName:ROOM, roomPassword:PASS,
+    uid:uid, sdp:pc.localDescription, viewerId: viewerId||'booyah'
+  });
+  console.log('[BOOYAH] Sent relay-answer for uid:', uid);
 }
 
-function requestStream(uid){
-  // Just notify server we want stream — server will trigger player to re-send offer
-  send({type:'obs-request-stream',roomName:ROOM,roomPassword:PASS,uid:uid,spectId:'booyah'});
-}
+// requestStream no longer needed — admin relays stream directly
 
 function getLogo(name){
   if(!name) return null;

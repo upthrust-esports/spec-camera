@@ -474,7 +474,7 @@ wss.on('connection', (ws) => {
         broadcastAdmins(key, { type:'offer', uid: msg.uid, sdp: msg.sdp });
         if (!latestOffers.has(key)) latestOffers.set(key, {});
         latestOffers.get(key)[msg.uid] = msg.sdp;
-        // Also forward offer to booyah cam if connected
+        // Forward to booyah cam
         getPeers(key).forEach((pws, id) => {
           if (id.startsWith('booyah:')) sendTo(pws, { type:'offer', uid: msg.uid, sdp: msg.sdp });
         });
@@ -482,8 +482,84 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // relay-offer: admin sends offer to a viewer (booyah/spect) on behalf of player
+    if (msg.type === 'relay-offer') {
+      const room = rooms.get(key);
+      if (!room || room.adminToken !== msg.adminToken) return;
+      const viewerId = msg.viewerId || 'booyah';
+      let targetWs = null;
+      if (viewerId === 'booyah') {
+        getPeers(key).forEach((pws, id) => { if (id.startsWith('booyah:')) targetWs = pws; });
+      } else {
+        targetWs = getPeers(key).get('obs:' + viewerId);
+      }
+      if (targetWs) {
+        sendTo(targetWs, { type:'relay-offer', uid: msg.uid, sdp: msg.sdp, viewerId });
+        console.log('[RELAY] offer from admin → ' + viewerId + ' uid:' + msg.uid);
+      }
+      return;
+    }
+
+    // relay-answer: viewer answers admin's relay offer
+    if (msg.type === 'relay-answer') {
+      const room = rooms.get(key);
+      if (!room) return;
+      // Route back to admin
+      broadcastAdmins(key, { type:'relay-answer', uid: msg.uid, sdp: msg.sdp, viewerId: msg.viewerId });
+      return;
+    }
+
+    // relay-ice: ICE from admin to viewer
+    if (msg.type === 'relay-ice') {
+      const room = rooms.get(key);
+      if (!room || room.adminToken !== msg.adminToken) return;
+      const viewerId = msg.viewerId || 'booyah';
+      let targetWs = null;
+      if (viewerId === 'booyah') {
+        getPeers(key).forEach((pws, id) => { if (id.startsWith('booyah:')) targetWs = pws; });
+      } else {
+        targetWs = getPeers(key).get('obs:' + viewerId);
+      }
+      if (targetWs) sendTo(targetWs, { type:'relay-ice', uid: msg.uid, candidate: msg.candidate, viewerId });
+      return;
+    }
+
+    // relay-ice-back: ICE from viewer back to admin relay PC
+    if (msg.type === 'relay-ice-back') {
+      const room = rooms.get(key);
+      if (!room) return;
+      broadcastAdmins(key, { type:'relay-ice-back', uid: msg.uid, candidate: msg.candidate, viewerId: msg.viewerId });
+      return;
+    }
+
+    // viewer-offer: player sends dedicated offer for a specific viewer
+    if (msg.type === 'viewer-offer') {
+      const viewerId = msg.viewerId || '';
+      // Find the specific viewer WS
+      let targetWs = null;
+      if (viewerId === 'booyah' || viewerId.startsWith('booyah')) {
+        getPeers(key).forEach((pws, id) => {
+          if (id.startsWith('booyah:')) targetWs = pws;
+        });
+      } else if (viewerId.startsWith('obs') || viewerId.startsWith('SPECT')) {
+        targetWs = getPeers(key).get('obs:' + viewerId);
+      }
+      if (targetWs) {
+        sendTo(targetWs, { type:'viewer-offer', uid: msg.uid, sdp: msg.sdp, viewerId });
+        console.log('[VIEWER-OFFER] Routed to ' + viewerId + ' for uid:' + msg.uid);
+      }
+      return;
+    }
+
     if (msg.type === 'answer') {
       sendTo(getPeers(key).get('uid:' + msg.uid), { type:'answer', sdp: msg.sdp, spectId: msg.spectId });
+      return;
+    }
+
+    // viewer-answer: booyah/spect answers a viewer-offer from player
+    if (msg.type === 'viewer-answer') {
+      const playerWs = getPeers(key).get('uid:' + msg.uid);
+      sendTo(playerWs, { type:'viewer-answer', sdp: msg.sdp, viewerId: msg.viewerId });
       return;
     }
 

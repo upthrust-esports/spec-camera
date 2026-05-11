@@ -684,7 +684,12 @@ function connectWS() {
     const msg=JSON.parse(e.data);
     if(msg.type==='admin-registered'){ toast('📡 Watching for players…'); msg.onlinePlayers?.forEach(uid=>{const c=S.cameras.find(x=>x.uid===uid);if(c)playerCameOnline(uid,c.playerName,c.slot,c.team);}); }
     if(msg.type==='player-joined'){playerCameOnline(msg.uid,msg.playerName,msg.slot,msg.team);toast('🟢 '+msg.playerName);}
-    if(msg.type==='player-left'){const c=S.cameras.find(x=>x.uid===msg.uid);playerWentOffline(msg.uid);toast('🔴 '+(c?.playerName||msg.uid));}
+    if(msg.type==='player-left'){
+      const c=S.cameras.find(x=>x.uid===msg.uid);
+      cleanupRelayPCs(msg.uid);
+      playerWentOffline(msg.uid);
+      toast('🔴 '+(c?.playerName||msg.uid));
+    }
     if(msg.type==='offer') await handleOffer(msg.uid,msg.sdp);
     if(msg.type==='ice'&&msg.from==='player'){const conn=peerConns.get(msg.uid);if(conn?.pc)try{await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch{}}
     if(msg.type==='error')toast('WS: '+msg.message);
@@ -692,6 +697,14 @@ function connectWS() {
       playerWentOffline(msg.uid);
       toast('📷 Camera stopped: '+msg.uid);
     }
+    // Relay answer from booyah/spect → update relay PC
+    if(msg.type==='relay-answer'){
+      await handleRelayAnswer(msg.uid, msg.viewerId, msg.sdp);
+    }
+    if(msg.type==='relay-ice-back'){
+      await handleRelayIce(msg.uid, msg.viewerId, msg.candidate);
+    }
+
     if(msg.type==='booyah-detected'){
       document.getElementById('booyah-badge').className='live-badge';
       document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH: '+esc(msg.teamName||'');
@@ -712,9 +725,11 @@ async function handleOffer(uid,sdp) {
     if(vid){
       vid.srcObject=event.streams[0];
       const w=document.getElementById('wait-'+uid);
-      if(w) w.style.display='none'; // hides photo fallback too
+      if(w) w.style.display='none';
     }
     updateFeedStatus(uid,'live'); startAudioMeter(uid,event.streams[0]); renderFeeds();
+    // Forward this stream to booyah cam and spect viewers
+    forwardStreamToViewers(uid, event.streams[0]);
   };
   pc.onicecandidate=({candidate})=>{if(candidate)wsSend({type:'ice',roomName:S.roomName,roomPassword:S.roomPassword,uid,candidate,from:'admin'});};
   pc.onconnectionstatechange=()=>{
@@ -724,6 +739,82 @@ async function handleOffer(uid,sdp) {
   await pc.setRemoteDescription(new RTCSessionDescription(sdp));
   const ans=await pc.createAnswer(); await pc.setLocalDescription(ans);
   wsSend({type:'answer',roomName:S.roomName,roomPassword:S.roomPassword,uid,sdp:pc.localDescription});
+}
+
+// ── Stream relay: admin forwards player streams to booyah/spect ──────────────
+// relayPCs: uid -> { booyah: RTCPeerConnection, spect1: RTCPeerConnection, ... }
+const relayPCs = new Map();
+
+async function forwardStreamToViewers(uid, stream) {
+  // Forward to booyah cam
+  await relayToViewer(uid, stream, 'booyah');
+}
+
+async function relayToViewer(uid, stream, viewerId) {
+  // Create a new PC from admin to the viewer
+  const iceServers = ICE_SERVERS || [{ urls: 'stun:stun.l.google.com:19302' }];
+  const rpc = new RTCPeerConnection({ iceServers });
+
+  // Store relay PC
+  if (!relayPCs.has(uid)) relayPCs.set(uid, {});
+  const old = relayPCs.get(uid)[viewerId];
+  if (old) try { old.close(); } catch {}
+  relayPCs.get(uid)[viewerId] = rpc;
+
+  // Add all tracks from the player stream
+  stream.getTracks().forEach(track => rpc.addTrack(track, stream));
+
+  rpc.onicecandidate = ({ candidate }) => {
+    if (candidate) wsSend({
+      type: 'relay-ice',
+      roomName: S.roomName, roomPassword: S.roomPassword,
+      adminToken: S.adminToken,
+      uid, viewerId, candidate
+    });
+  };
+
+  rpc.onconnectionstatechange = () => {
+    console.log('[RELAY ' + viewerId + ' uid:' + uid + ']', rpc.connectionState);
+  };
+
+  try {
+    const offer = await rpc.createOffer();
+    await rpc.setLocalDescription(offer);
+    wsSend({
+      type: 'relay-offer',
+      roomName: S.roomName, roomPassword: S.roomPassword,
+      adminToken: S.adminToken,
+      uid, viewerId, sdp: rpc.localDescription
+    });
+    console.log('[RELAY] Sent offer to ' + viewerId + ' for uid:' + uid);
+  } catch(e) { console.error('[RELAY] offer error:', e); }
+}
+
+// Handle relay-answer from viewer (booyah/spect)
+// Called from WS message handler
+async function handleRelayAnswer(uid, viewerId, sdp) {
+  const rpcMap = relayPCs.get(uid);
+  if (!rpcMap || !rpcMap[viewerId]) return;
+  const rpc = rpcMap[viewerId];
+  if (rpc.signalingState !== 'stable') {
+    await rpc.setRemoteDescription(new RTCSessionDescription(sdp));
+    console.log('[RELAY] Answer set for', viewerId, uid);
+  }
+}
+
+async function handleRelayIce(uid, viewerId, candidate) {
+  const rpcMap = relayPCs.get(uid);
+  if (!rpcMap || !rpcMap[viewerId]) return;
+  try { await rpcMap[viewerId].addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+}
+
+// When player disconnects, close relay PCs
+function cleanupRelayPCs(uid) {
+  const rpcMap = relayPCs.get(uid);
+  if (rpcMap) {
+    Object.values(rpcMap).forEach(rpc => { try { rpc.close(); } catch {} });
+    relayPCs.delete(uid);
+  }
 }
 
 // ── Audio Meter ───────────────────────────────────────────────────────────────
