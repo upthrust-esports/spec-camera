@@ -836,7 +836,7 @@ function renderFeeds(){
             ${logoHtml}
             <div class="feed-info">
               <div class="feed-name">${esc(d.playerName)}</div>
-              <div class="feed-team">${d.team?esc(d.team):'—'}</div>
+              <div class="feed-team">${d.team?esc(d.team):''}</div>
             </div>
             <div class="feed-meta">
               <span class="offline-badge" id="fstat-${uid}">WAITING</span>
@@ -977,7 +977,7 @@ function renderImportPreview(){
     importStaging.map(p=>{
       const logo=p.team&&getTeamLogo(p.team);
       const logoEl=logo?`<img class="prev-logo" src="${logo}">`:`<div class="prev-logo-ph">🏆</div>`;
-      return `<div class="prev-row">${logoEl}<span class="prev-name">${esc(p.name)}</span><span class="prev-team">${esc(p.team||'—')}</span><span class="prev-uid">${esc(p.uid)}</span><span class="prev-slot">${p.slot}</span></div>`;
+      return `<div class="prev-row">${logoEl}<span class="prev-name">${esc(p.name)}</span><span class="prev-team">${esc(p.team||'')}</span><span class="prev-uid">${esc(p.uid)}</span><span class="prev-slot">${p.slot}</span></div>`;
     }).join('');
 }
 
@@ -1116,7 +1116,7 @@ function renderCameras(){
     const on=onlinePlayers.has(c.uid);
     const badge=on?'<span class="live-badge"><span class="d"></span>LIVE</span>':'<span class="offline-badge">OFF</span>';
     const logo = c.team && getTeamLogo(c.team) ? '<img class="tlogo-sm" src="'+getTeamLogo(c.team)+'">' : '';
-    const tb2=c.team?(logo+'<span class="team-badge">'+esc(c.team)+'</span>'):'—';
+    const tb2=c.team?(logo+'<span class="team-badge">'+esc(c.team)+'</span>'):'';
     const discBtn = onlinePlayers.has(c.uid) ? '<button class="btn-disc" onclick="disconnectPlayer(this.dataset.uid)" data-uid="'+esc(c.uid)+'">✕ CAM</button>' : '';
     var safeUid = esc(c.uid);
     return '<tr><td><span class="st">S'+c.slot+'</span></td><td>'+tb2+'</td><td><strong>'+esc(c.playerName)+'</strong></td><td class="uc">'+safeUid+'</td><td>'+badge+'</td><td style="display:flex;gap:4px"><button class="bs brm" onclick="removeCam(this.dataset.uid)" data-uid="'+safeUid+'">✕ DEL</button>'+discBtn+'</td></tr>';
@@ -1235,7 +1235,7 @@ function renderSpectGrid() {
         <div style="font-size:10px;padding-top:2px">
           ${cam
             ? `<strong style="color:var(--text)">${esc(cam.playerName)}</strong> ${isLive ? '<span class="spect-live"><span class="d"></span>LIVE</span>' : '<span class="offline-badge">OFF</span>'}`
-            : `<span style="color:var(--muted);font-size:10px">—</span>`
+            : `<span style="color:var(--muted);font-size:10px">-</span>`
           }
         </div>
       </div>
