@@ -9,23 +9,11 @@
   html,body{width:1280px;height:720px;overflow:hidden;background:#000;}
 
   /* ── Waiting state ── */
-  #waiting{
-    position:fixed;inset:0;
-    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;
-    background:#0a0d14;z-index:100;
-    font-family:'Rajdhani',sans-serif;color:#c8952a;font-size:13px;letter-spacing:3px;
-  }
-  .w-ring{
-    width:36px;height:36px;
-    border:2px solid rgba(255, 255, 255, 0.2);
-    border-top-color:#000000;
-    border-radius:50%;
-    animation:spin 1s linear infinite;
-  }
+
 
   /* ── Stage ── */
   #stage{
-    display:none;
+    display:block;
     position:relative;
     width:1280px;height:720px;
     background:#0a0d14;
@@ -178,11 +166,6 @@
 </head>
 <body>
 
-<div id="waiting">
-  <div class="w-ring"></div>
-  <span>WAITING FOR BOOYAH</span>
-</div>
-
 <div id="stage">
   <!-- Top banner -->
   <div class="top-banner">
@@ -221,24 +204,19 @@ const teamLogos    = {};
 // Boot
 (async function(){
   try {
-    const [p,l] = await Promise.all([fetch('/api/players/photos'),fetch('/api/logos')]);
-    const pd = await p.json(); const ld = await l.json();
+    const [p,l,t] = await Promise.all([
+      fetch('/api/players/photos'),
+      fetch('/api/logos'),
+      fetch('/api/turn-config')
+    ]);
+    const pd=await p.json(); const ld=await l.json(); const td=await t.json();
     if(pd.photos) Object.assign(playerPhotos, pd.photos);
     if(ld.logos)  Object.assign(teamLogos,    ld.logos);
-  } catch {}
+    if(td.iceServers) window.ICE_SERVERS = td.iceServers;
+  } catch(e){ console.warn('Boot error:', e); }
 
-  // ?test=1 shows frame immediately with dummy players for preview
-  if(params.get('test') === '1') {
-    booyahShown = true;
-    showBooyah('RNX', null, [
-      {uid:'111',playerName:'RNX . PLAYER1'},
-      {uid:'222',playerName:'RNX . PLAYER2'},
-      {uid:'333',playerName:'RNX . PLAYER3'},
-      {uid:'444',playerName:'RNX . PLAYER4'},
-    ]);
-    return; // don't connect WS in test mode
-  }
-
+  // Always show the frame immediately with empty slots
+  showBooyah('', null, []);
   connectWS();
 })();
 
@@ -248,16 +226,21 @@ function connectWS(){
   ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
-    if(msg.type === 'booyah-detected' && !booyahShown){
+    if(msg.type === 'booyah-detected'){
       booyahShown = true;
+      peers.forEach(function(conn){ if(conn.pc) conn.pc.close(); });
+      peers.clear();
       showBooyah(msg.teamName, msg.teamLogo, msg.players);
     }
     if(msg.type === 'booyah-reset'){
       booyahShown = false;
       peers.forEach(function(conn){ if(conn.pc) conn.pc.close(); });
       peers.clear();
-      document.getElementById('stage').style.display   = 'none';
-      document.getElementById('waiting').style.display = 'flex';
+      showBooyah('', null, []);
+    }
+    // When a player comes online, try to connect their stream
+    if(msg.type === 'player-online-in-slot'){
+      requestStream(msg.uid);
     }
     if(msg.type === 'answer'){
       const conn = peers.get(msg.uid);
@@ -271,12 +254,20 @@ function connectWS(){
   };
 }
 
-function showBooyah(teamName, teamLogoUrl, players){
-  document.getElementById('waiting').style.display = 'none';
-  document.getElementById('stage').style.display   = 'block';
-
+async function showBooyah(teamName, teamLogoUrl, players){
+  // If no players passed, load from API
+  if(!players || !players.length){
+    try{
+      var res = await fetch('/api/spect/booyah-players?room='+encodeURIComponent(ROOM)+'&pass='+encodeURIComponent(PASS));
+      var data = await res.json();
+      if(data.players && data.players.length) players = data.players;
+    }catch(e){}
+    if(!players || !players.length){
+      players = [{uid:'',playerName:'SLOT 1'},{uid:'',playerName:'SLOT 2'},{uid:'',playerName:'SLOT 3'},{uid:'',playerName:'SLOT 4'}];
+    }
+  }
   // Banner
-  const name = (teamName||'WINNER').toUpperCase();
+  const name = (teamName||'').toUpperCase();
   document.getElementById('banner-name').textContent = name;
 
   // Logo
@@ -341,7 +332,25 @@ function showBooyah(teamName, teamLogoUrl, players){
 
 function requestStream(uid){
   const pc = new RTCPeerConnection({
-    iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]
+    iceServers:[
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+    ]
   });
   peers.set(uid,{pc});
 

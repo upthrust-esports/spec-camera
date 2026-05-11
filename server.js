@@ -165,6 +165,25 @@ app.get('/api/room/cameras', (req, res) => {
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', rooms: rooms.size }));
 
+// ─── Public endpoint: booyah players for booyah-cam overlay ──────────────────
+app.get('/api/spect/booyah-players', (req, res) => {
+  const { room, pass } = req.query;
+  const key = roomKey(room || 'test', pass || 'test');
+  if (!rooms.has(key)) {
+    // try first available room
+    if (!rooms.size) return res.json({ players: [] });
+    const [k] = [...rooms.keys()];
+    const cameras = (playerCameras.get(k) || []).slice(0, 4).map(c => ({
+      uid: c.uid, playerName: c.playerName, team: c.team
+    }));
+    return res.json({ players: cameras });
+  }
+  const cameras = (playerCameras.get(key) || []).slice(0, 4).map(c => ({
+    uid: c.uid, playerName: c.playerName, team: c.team
+  }));
+  return res.json({ players: cameras });
+});
+
 // ─── TURN credentials endpoint ────────────────────────────────────────────────
 // Set these on Render: TURN_URL, TURN_USERNAME, TURN_CREDENTIAL
 app.get('/api/turn-config', (req, res) => {
