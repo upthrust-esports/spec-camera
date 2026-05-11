@@ -411,6 +411,8 @@ wss.on('connection', (ws) => {
       getPeers(key).set(wsId, ws);
       sendTo(ws, { type:'booyah-registered' });
       if (booyahDetected.has(key)) sendTo(ws, { type:'booyah-detected', teamName:'', players:[] });
+      // Tell admins booyah cam connected — so they relay existing streams
+      broadcastAdmins(key, { type:'booyah-registered' });
       // Send all stored offers so booyah cam connects immediately
       if (latestOffers.has(key)) {
         Object.entries(latestOffers.get(key)).forEach(([uid, sdp]) => {

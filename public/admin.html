@@ -705,6 +705,17 @@ function connectWS() {
       await handleRelayIce(msg.uid, msg.viewerId, msg.candidate);
     }
 
+    // Booyah cam just connected — relay all existing streams to it
+    if(msg.type==='booyah-registered'){
+      console.log('[RELAY] Booyah cam registered, forwarding', peerConns.size, 'streams');
+      peerConns.forEach(function(conn, uid){
+        if(conn && conn.stream){
+          console.log('[RELAY] Forwarding stream for uid:', uid);
+          forwardStreamToViewers(uid, conn.stream);
+        }
+      });
+    }
+
     if(msg.type==='booyah-detected'){
       document.getElementById('booyah-badge').className='live-badge';
       document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH: '+esc(msg.teamName||'');
@@ -746,8 +757,10 @@ async function handleOffer(uid,sdp) {
 const relayPCs = new Map();
 
 async function forwardStreamToViewers(uid, stream) {
-  // Forward to booyah cam
-  await relayToViewer(uid, stream, 'booyah');
+  // Forward to booyah cam with small delay to ensure WS is ready
+  setTimeout(async function(){
+    await relayToViewer(uid, stream, 'booyah');
+  }, 500);
 }
 
 async function relayToViewer(uid, stream, viewerId) {
