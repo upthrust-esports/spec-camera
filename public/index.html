@@ -228,11 +228,20 @@ function connectWS() {
       toast('⚠️ Camera stopped by operator');
     }
 
-    // Admin just connected — re-send our offer so they can answer
+    // Admin or booyah/spect viewer connected — re-send offer
     if (msg.type === 'admin-joined') {
       if (pc && localStream) {
-        toast('Admin connected — syncing…');
         await renegotiate();
+      }
+    }
+
+    // OBS/booyah cam requesting our stream — re-send offer
+    if (msg.type === 'obs-offer-request') {
+      if (pc && localStream && pc.connectionState !== 'new') {
+        // re-negotiate to include new viewer
+        await renegotiate();
+      } else if (localStream) {
+        createPeerConnection();
       }
     }
 
@@ -283,12 +292,11 @@ async function startCamera() {
   }
 }
 
-// Re-send offer to admin (called when admin connects late)
+// Re-send offer — create fresh peer connection and offer
 async function renegotiate() {
   try {
-    if (!pc || !localStream) return;
-    // Close old PC and create fresh one
-    pc.close();
+    if (!localStream) return;
+    if (pc) { try { pc.close(); } catch {} pc = null; }
     createPeerConnection();
   } catch(e) { console.error('renegotiate:', e); }
 }

@@ -435,8 +435,16 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'obs-request-stream') {
       const playerWs = getPeers(key).get('uid:' + msg.uid);
-      if (playerWs) sendTo(playerWs, { type:'obs-offer-request', spectId: msg.spectId });
-      else sendTo(ws, { type:'error', message:'Player not online' });
+      if (playerWs) {
+        sendTo(playerWs, { type:'obs-offer-request', spectId: msg.spectId });
+        // Also immediately replay latest offer if we have it
+        if (latestOffers.has(key) && latestOffers.get(key)[msg.uid]) {
+          sendTo(ws, { type:'offer', uid: msg.uid, sdp: latestOffers.get(key)[msg.uid] });
+        }
+      } else {
+        // Player not online — send error but don't block
+        console.log('[OBS] Player not online for stream:', msg.uid);
+      }
       return;
     }
 
