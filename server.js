@@ -345,6 +345,20 @@ wss.on('connection', (ws) => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
     const key = roomKey(msg.roomName, msg.roomPassword);
 
+    // ── Admin force-disconnect a player camera ───────────────────────────────
+    if (msg.type === 'admin-disconnect-player') {
+      const room = rooms.get(key);
+      if (!room || room.adminToken !== msg.adminToken) return;
+      const playerWs = getPeers(key).get('uid:' + msg.uid);
+      if (playerWs) {
+        sendTo(playerWs, { type: 'force-disconnect', reason: msg.reason || 'Disconnected by admin' });
+        console.log('[ADMIN] Force disconnected player: ' + msg.uid);
+      }
+      // Also notify all admins that this player was disconnected
+      broadcastAdmins(key, { type: 'player-force-disconnected', uid: msg.uid });
+      return;
+    }
+
     if (msg.type === 'register-player') {
       if (!rooms.has(key)) return sendTo(ws, { type:'error', message:'Room not found' });
       const reg = (playerCameras.get(key)||[]).find(c => c.uid === msg.uid);

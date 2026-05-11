@@ -215,6 +215,19 @@ function connectWS() {
       toast(msg.message);
     }
 
+    // Admin force-disconnected this camera
+    if (msg.type === 'force-disconnect') {
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      if (pc) pc.close();
+      localStream = pc = null;
+      document.getElementById('local-video').srcObject = null;
+      document.getElementById('cam-overlay').classList.remove('hidden');
+      document.getElementById('ci-stream').textContent = 'STOPPED';
+      ['ci-cam','ci-mic','ci-conn'].forEach(id => document.getElementById(id).textContent = '—');
+      setStatus('error', 'CAM STOPPED');
+      toast('⚠️ Camera stopped by operator');
+    }
+
     // Admin just connected — re-send our offer so they can answer
     if (msg.type === 'admin-joined') {
       if (pc && localStream) {

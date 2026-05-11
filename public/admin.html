@@ -216,6 +216,9 @@ tr:hover td{background:rgba(0,229,255,0.015);}
 .btn-spect-set:hover{background:#33edff;}
 .spect-live{display:inline-flex;align-items:center;gap:4px;background:rgba(0,255,136,0.1);color:var(--green);border:1px solid rgba(0,255,136,0.2);padding:2px 7px;border-radius:2px;font-family:'Share Tech Mono',monospace;font-size:8px;}
 .spect-live .d{width:4px;height:4px;border-radius:50%;background:currentColor;animation:bl 1.2s infinite;}
+.btn-disc{background:rgba(255,59,92,0.12);color:var(--red);border:1px solid rgba(255,59,92,0.3);padding:3px 8px;border-radius:3px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .15s;}
+.btn-disc:hover{background:rgba(255,59,92,0.25);}
+.btn-disc:disabled{opacity:.4;cursor:not-allowed;}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--accent);border-radius:4px;padding:8px 13px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);z-index:9999;transform:translateY(50px);opacity:0;transition:all .3s;}
 .toast.show{transform:translateY(0);opacity:1;}
 </style>
@@ -685,6 +688,10 @@ function connectWS() {
     if(msg.type==='offer') await handleOffer(msg.uid,msg.sdp);
     if(msg.type==='ice'&&msg.from==='player'){const conn=peerConns.get(msg.uid);if(conn?.pc)try{await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch{}}
     if(msg.type==='error')toast('WS: '+msg.message);
+    if(msg.type==='player-force-disconnected'){
+      playerWentOffline(msg.uid);
+      toast('📷 Camera stopped: '+msg.uid);
+    }
     if(msg.type==='booyah-detected'){
       document.getElementById('booyah-badge').className='live-badge';
       document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH: '+esc(msg.teamName||'');
@@ -834,6 +841,7 @@ function renderFeeds(){
             <div class="feed-meta">
               <span class="offline-badge" id="fstat-${uid}">WAITING</span>
               <span style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">S${d.slot}</span>
+              <button class="btn-disc" id="disc-btn-${uid}" onclick="disconnectPlayer('${uid}')" title="Stop camera">✕ CAM</button>
             </div>
           </div>
           <div class="feed-video-wrap">
@@ -1108,7 +1116,8 @@ function renderCameras(){
     const badge=on?'<span class="live-badge"><span class="d"></span>LIVE</span>':'<span class="offline-badge">OFF</span>';
     const logo = c.team && getTeamLogo(c.team) ? '<img class="tlogo-sm" src="'+getTeamLogo(c.team)+'">' : '';
     const tb2=c.team?`${logo}<span class="team-badge">${esc(c.team)}</span>`:'—';
-    return `<tr><td><span class="st">S${c.slot}</span></td><td>${tb2}</td><td><strong>${esc(c.playerName)}</strong></td><td class="uc">${esc(c.uid)}</td><td>${badge}</td><td><button class="bs brm" onclick="removeCam('${esc(c.uid)}')">✕</button></td></tr>`;
+    const discBtn = onlinePlayers.has(c.uid) ? '<button class="btn-disc" onclick="disconnectPlayer(\'' + esc(c.uid) + '\')">✕ CAM</button>' : '';
+    return '<tr><td><span class="st">S'+c.slot+'</span></td><td>'+tb2+'</td><td><strong>'+esc(c.playerName)+'</strong></td><td class="uc">'+esc(c.uid)+'</td><td>'+badge+'</td><td style="display:flex;gap:4px"><button class="bs brm" onclick="removeCam(''+esc(c.uid)+'')">✕ DEL</button>'+discBtn+'</td></tr>';
   }).join('');
 }
 
@@ -1408,6 +1417,20 @@ async function resetBooyah() {
   document.getElementById('booyah-badge').className='offline-badge';
   document.getElementById('booyah-badge').textContent='WAITING';
   toast('Booyah reset');
+}
+
+// ── Force disconnect a player camera ─────────────────────────────────────────
+function disconnectPlayer(uid) {
+  if (!confirm('Stop camera for player ' + uid + '? Their photo will show as fallback.')) return;
+  wsSend({
+    type: 'admin-disconnect-player',
+    roomName: S.roomName, roomPassword: S.roomPassword,
+    adminToken: S.adminToken, uid: uid,
+    reason: 'Stopped by operator'
+  });
+  // Immediately update UI on admin side
+  playerWentOffline(uid);
+  toast('Camera stopped for: ' + uid);
 }
 
 function wsSend(obj){if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj));}
