@@ -1125,9 +1125,23 @@ function renderOnlineList(){
   const el=document.getElementById('online-list');
   if(!onlinePlayers.size){el.innerHTML='<div style="font-size:10px;color:var(--muted);padding:3px 0">No players online</div>';return;}
   el.innerHTML='';
-  onlinePlayers.forEach(({playerName,slot},uid)=>{
-    const item=document.createElement('div');item.className='online-item';item.onclick=()=>aTab('feeds');
-    item.innerHTML=`<span class="live-dot"></span><span class="pname">${esc(playerName)}</span><span class="slot-t">S${slot}</span>`;
+  onlinePlayers.forEach(function(data,uid){
+    const playerName=data.playerName, slot=data.slot;
+    const item=document.createElement('div');
+    item.className='online-item';
+    item.style.justifyContent='space-between';
+    const left=document.createElement('div');
+    left.style.cssText='display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;';
+    left.onclick=function(){aTab('feeds');};
+    left.innerHTML='<span class="live-dot"></span><span class="pname">'+esc(playerName)+'</span><span class="slot-t">S'+slot+'</span>';
+    const btn=document.createElement('button');
+    btn.className='btn-disc';
+    btn.style.cssText='padding:2px 6px;font-size:8px;flex-shrink:0;';
+    btn.title='Stop camera';
+    btn.textContent='✕ CAM';
+    btn.onclick=function(e){e.stopPropagation();disconnectPlayer(uid);};
+    item.appendChild(left);
+    item.appendChild(btn);
     el.appendChild(item);
   });
 }
