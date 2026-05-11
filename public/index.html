@@ -141,6 +141,20 @@ const API_HOST  = IS_LOCAL ? (location.hostname + ':3000') : location.host;
 const API       = location.protocol + '//' + API_HOST;
 const WS_URL    = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + API_HOST;
 
+// Fetch TURN config from server (credentials stored as env vars on Render)
+let ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+async function loadIceServers() {
+  try {
+    const res  = await fetch(API + '/api/turn-config');
+    const data = await res.json();
+    if (data.iceServers) ICE_SERVERS = data.iceServers;
+    console.log('[ICE] Loaded ' + ICE_SERVERS.length + ' servers');
+  } catch(e) { console.warn('[ICE] Using STUN only:', e); }
+}
+
 let S = { roomName:'', roomPassword:'', uid:'', playerName:'', slot:null };
 
 let ws      = null;
@@ -154,6 +168,7 @@ async function joinRoom() {
   if (!uid) { toast('Enter your UID'); return; }
 
   toast('Connecting...');
+  await loadIceServers();
   try {
     const res  = await fetch(API + '/api/room/player-join', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -286,10 +301,7 @@ function startRetry() {
 
 function createPeerConnection() {
   pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ]
+    iceServers: ICE_SERVERS
   });
 
   // Add all tracks

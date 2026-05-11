@@ -222,7 +222,7 @@ tr:hover td{background:rgba(0,229,255,0.015);}
 </head>
 <body>
 <header>
-  <div class="logo">UE</div>
+  <div class="logo">UP</div>
   <h1><span>Admin</span> Panel — Upthrust Esports</h1>
   <div class="hright">
     <span class="pill" id="h-pill">⚙ ADMIN</span>
@@ -534,6 +534,20 @@ const API    = location.origin;
 const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
 const ADMIN_U = 'angry', ADMIN_P = 'angry0306';
 
+// Fetch TURN config from server (credentials stored as env vars on Render)
+let ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+async function loadIceServers() {
+  try {
+    const res  = await fetch(location.origin + '/api/turn-config');
+    const data = await res.json();
+    if (data.iceServers) ICE_SERVERS = data.iceServers;
+    console.log('[ICE] Loaded ' + ICE_SERVERS.length + ' servers');
+  } catch(e) { console.warn('[ICE] Using STUN only:', e); }
+}
+
 let S  = { roomName:'', roomPassword:'', adminToken:'', cameras:[] };
 let ws = null;
 const peerConns      = new Map();
@@ -683,7 +697,7 @@ function connectWS() {
 // ── WebRTC ────────────────────────────────────────────────────────────────────
 async function handleOffer(uid,sdp) {
   if(peerConns.has(uid))peerConns.get(uid).pc.close();
-  const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+  const pc=new RTCPeerConnection({iceServers: ICE_SERVERS});
   peerConns.set(uid,{pc,stream:null});
   pc.ontrack=(event)=>{
     const conn=peerConns.get(uid); if(conn)conn.stream=event.streams[0];

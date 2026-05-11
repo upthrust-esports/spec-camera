@@ -165,6 +165,25 @@ app.get('/api/room/cameras', (req, res) => {
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', rooms: rooms.size }));
 
+// ─── TURN credentials endpoint ────────────────────────────────────────────────
+// Set these on Render: TURN_URL, TURN_USERNAME, TURN_CREDENTIAL
+app.get('/api/turn-config', (req, res) => {
+  const turnUrl        = process.env.TURN_URL        || 'openrelay.metered.ca';
+  const turnUsername   = process.env.TURN_USERNAME   || 'openrelayproject';
+  const turnCredential = process.env.TURN_CREDENTIAL || 'openrelayproject';
+
+  res.json({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'turn:' + turnUrl + ':80',  username: turnUsername, credential: turnCredential },
+      { urls: 'turn:' + turnUrl + ':443', username: turnUsername, credential: turnCredential },
+      { urls: 'turn:' + turnUrl + ':443?transport=tcp', username: turnUsername, credential: turnCredential },
+      { urls: 'turns:' + turnUrl + ':443', username: turnUsername, credential: turnCredential },
+    ]
+  });
+});
+
 // ─── REST: Player photos ──────────────────────────────────────────────────────
 app.get('/api/players/photos', (req, res) => {
   const dir = path.join(__dirname, 'public', 'players');
