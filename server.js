@@ -432,6 +432,15 @@ wss.on('connection', (ws) => {
       getPeers(key).set(wsId, ws);
       const uid = (spectators.get(key)||{})[msg.spectId] || null;
       sendTo(ws, { type:'obs-registered', spectId: msg.spectId, uid });
+      // Notify admins so they can relay the correct stream to this spect
+      broadcastAdmins(key, { type:'spect-viewer-registered', spectId: msg.spectId, uid });
+      return;
+    }
+
+    // obs-ready: spect viewer is ready, tell admin to relay the stream
+    if (msg.type === 'obs-ready') {
+      const spectId = 'SPECT' + msg.spectId;
+      broadcastAdmins(key, { type:'spect-viewer-registered', spectId, uid: msg.uid });
       return;
     }
 
@@ -523,6 +532,7 @@ wss.on('connection', (ws) => {
         targetWs = getPeers(key).get('obs:' + viewerId);
       }
       if (targetWs) sendTo(targetWs, { type:'relay-ice', uid: msg.uid, candidate: msg.candidate, viewerId });
+      else console.log('[RELAY-ICE] No target for viewerId:', viewerId);
       return;
     }
 

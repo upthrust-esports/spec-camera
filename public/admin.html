@@ -709,11 +709,23 @@ function connectWS() {
     if(msg.type==='booyah-registered'){
       console.log('[RELAY] Booyah cam registered, forwarding', peerConns.size, 'streams');
       peerConns.forEach(function(conn, uid){
-        if(conn && conn.stream){
-          console.log('[RELAY] Forwarding stream for uid:', uid);
-          forwardStreamToViewers(uid, conn.stream);
-        }
+        if(conn && conn.stream) relayToViewer(uid, conn.stream, 'booyah');
       });
+    }
+
+    // Spect viewer connected — relay the correct player stream to it
+    if(msg.type==='spect-viewer-registered'){
+      var spectId  = msg.spectId;
+      var slotNum  = parseInt(spectId.replace('SPECT','')) || 0;
+      var slot     = spectSlots && spectSlots.find(function(x){ return x.slot===slotNum; });
+      var uid      = slot ? slot.uid : null;
+      console.log('[RELAY] Spect viewer registered:', spectId, 'uid:', uid);
+      if(uid){
+        var conn = peerConns.get(uid);
+        if(conn && conn.stream){
+          relayToViewer(uid, conn.stream, spectId);
+        }
+      }
     }
 
     if(msg.type==='booyah-detected'){
@@ -757,10 +769,26 @@ async function handleOffer(uid,sdp) {
 const relayPCs = new Map();
 
 async function forwardStreamToViewers(uid, stream) {
-  // Forward to booyah cam with small delay to ensure WS is ready
   setTimeout(async function(){
+    // Forward to booyah cam
     await relayToViewer(uid, stream, 'booyah');
+    // Forward to any spect slots currently watching this uid
+    const s = spectAssign || {};
+    for (var slotNum = 1; slotNum <= 6; slotNum++) {
+      var slot = spectSlots && spectSlots.find(function(x){ return x.slot === slotNum; });
+      if (slot && slot.uid === uid) {
+        await relayToViewer(uid, stream, 'SPECT' + slotNum);
+      }
+    }
   }, 500);
+}
+
+// Call this when spect assignment changes — relay stream to new spect viewer
+async function relayStreamToSpect(slotNum, uid) {
+  const conn = peerConns.get(uid);
+  if (conn && conn.stream) {
+    await relayToViewer(uid, conn.stream, 'SPECT' + slotNum);
+  }
 }
 
 async function relayToViewer(uid, stream, viewerId) {

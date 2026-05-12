@@ -62,33 +62,34 @@ function connectWS() {
     const msg = JSON.parse(e.data);
 
     // Server tells us which player this spectator is watching
-    if (msg.type === 'spect-update' && msg.spectId === SPECT_ID) {
-      if (msg.uid !== currentUid) {
-        currentUid = msg.uid;
-        if (msg.uid) {
-          setWaiting('Connecting to ' + msg.uid + '...');
-          requestStream(msg.uid);
+    if ((msg.type === 'spect-update' && msg.spectId === SPECT_ID) ||
+        (msg.type === 'spect-update-all' && msg.spectators && msg.spectators[SPECT_ID])) {
+      const newUid = msg.uid || (msg.spectators && msg.spectators[SPECT_ID]);
+      if (newUid !== currentUid) {
+        currentUid = newUid;
+        if (newUid) {
+          setWaiting('Waiting for stream...');
+          requestStream(newUid);
         } else {
-          setWaiting('Spectator ' + SPECT_ID + ' not watching anyone');
+          setWaiting('Spect ' + SPECT_ID + ' — not assigned');
           clearStream();
         }
       }
     }
 
-    // WebRTC answer from player (via signaling)
-    if (msg.type === 'answer') {
-      if (pc && pc.signalingState !== 'stable') {
-        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-      }
+    // relay-offer from admin — admin is forwarding player stream to us
+    if (msg.type === 'relay-offer') {
+      console.log('[SPECT'+SPECT_ID+'] relay-offer for uid:', msg.uid);
+      currentUid = msg.uid;
+      await handleRelayOffer(msg.uid, msg.sdp);
     }
 
-    // ICE from player
-    if (msg.type === 'ice' && msg.from === 'player') {
-      try { if (pc) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch {}
+    // relay-ice from admin
+    if (msg.type === 'relay-ice') {
+      try { if (pc) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch(e) {}
     }
 
     if (msg.type === 'obs-registered') {
-      // If a player is already assigned, request stream immediately
       if (msg.uid) {
         currentUid = msg.uid;
         requestStream(msg.uid);
@@ -111,14 +112,22 @@ function connectWS() {
 // ── Request stream from a specific player ─────────────────────────────────────
 async function requestStream(uid) {
   clearStream();
-  setWaiting('Connecting to player ' + uid + '...');
+  currentUid = uid;
+  setWaiting('Waiting for stream...');
+  // Tell server we are ready — admin will send relay-offer
+  send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid });
+}
 
-  pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ]
-  });
+async function handleRelayOffer(uid, sdp) {
+  if (pc) { try{pc.close();}catch{} pc=null; }
+  setWaiting('Connecting...');
+  let iceServers = [{ urls:'stun:stun.l.google.com:19302' }];
+  try {
+    const td = await (await fetch('/api/turn-config')).json();
+    if (td.iceServers) iceServers = td.iceServers;
+  } catch {}
+
+  pc = new RTCPeerConnection({ iceServers });
 
   pc.ontrack = (event) => {
     document.getElementById('feed').srcObject = event.streams[0];
@@ -127,23 +136,26 @@ async function requestStream(uid) {
 
   pc.onicecandidate = ({ candidate }) => {
     if (candidate) send({
-      type: 'ice', roomName: ROOM_NAME, roomPassword: ROOM_PASS,
-      uid, candidate, from: 'obs', spectId: SPECT_ID
+      type: 'relay-ice-back',
+      roomName: ROOM_NAME, roomPassword: ROOM_PASS,
+      uid, candidate, viewerId: 'SPECT' + SPECT_ID
     });
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-      setWaiting('Stream lost — waiting...');
+    if (pc.connectionState==='failed'||pc.connectionState==='disconnected') {
+      setWaiting('Stream lost...');
       document.getElementById('waiting').style.display = 'flex';
     }
   };
 
-  // Ask server to forward offer request to the player
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
   send({
-    type: 'obs-request-stream',
-    roomName: ROOM_NAME, roomPassword: ROOM_PASS,
-    uid, spectId: SPECT_ID
+    type:'relay-answer',
+    roomName:ROOM_NAME, roomPassword:ROOM_PASS,
+    uid, sdp:pc.localDescription, viewerId:'SPECT'+SPECT_ID
   });
 }
 
