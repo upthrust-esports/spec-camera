@@ -644,9 +644,36 @@ async function adminLogin() {
     const res  = await fetch(API+'/api/admin/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
     const data = await res.json();
     if (!res.ok) { toast(data.error||'Server error'); return; }
-    S = { roomName:data.roomName, roomPassword:data.roomPassword, adminToken:data.adminToken, cameras:data.cameras||[] };
+    S = { roomName:data.roomName, roomPassword:data.roomPassword, adminToken:data.adminToken, cameras:data.cameras||[], _user:user, _pass:pass };
     showDashboard(); connectWS(); toast('Welcome, '+user+'!');
+    // Auto-refresh token every 10 minutes (Render may restart)
+    setInterval(async function(){
+      const res = await fetch(API+'/api/admin/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:S._user,password:S._pass})});
+      const d = await res.json();
+      if(res.ok && d.adminToken) { S.adminToken=d.adminToken; console.log('[TOKEN] Auto-refreshed'); }
+    }, 10*60*1000);
   } catch { toast('Cannot reach server'); }
+}
+
+// Re-fetch fresh adminToken from server (token changes on every server restart)
+async function refreshAdminToken() {
+  try {
+    const user = document.getElementById('l-user')?.value || 'angry';
+    const pass = document.getElementById('l-pass')?.value || 'angry0306';
+    const res  = await fetch(API+'/api/admin/session',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:user, password:pass})
+    });
+    const data = await res.json();
+    if (res.ok && data.adminToken) {
+      S.adminToken    = data.adminToken;
+      S.roomName      = data.roomName;
+      S.roomPassword  = data.roomPassword;
+      console.log('[TOKEN] Refreshed adminToken:', data.adminToken.slice(0,8)+'...');
+      return true;
+    }
+  } catch(e) { console.error('[TOKEN] refresh failed:', e); }
+  return false;
 }
 
 function showDashboard() {
@@ -692,7 +719,11 @@ function connectWS() {
     }
     if(msg.type==='offer') await handleOffer(msg.uid,msg.sdp);
     if(msg.type==='ice'&&msg.from==='player'){const conn=peerConns.get(msg.uid);if(conn?.pc)try{await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch{}}
-    if(msg.type==='error')toast('WS: '+msg.message);
+    if(msg.type==='error'){
+      toast('WS: '+msg.message);
+      // If invalid token error, refresh
+      if(msg.message && msg.message.includes('token')) refreshAdminToken();
+    }
     if(msg.type==='player-force-disconnected'){
       playerWentOffline(msg.uid);
       toast('📷 Camera stopped: '+msg.uid);
@@ -1428,6 +1459,8 @@ async function setSpect(slotNum) {
   slot.uid = uid;
   saveSpectSlots();
 
+  // Refresh token in case server restarted
+  if (!S.adminToken) await refreshAdminToken();
   console.log('[SPECT SET] token:', S.adminToken ? S.adminToken.slice(0,8)+'...' : 'MISSING', 'room:', S.roomName);
   try {
     const res = await fetch(API + '/api/spect/set', {
