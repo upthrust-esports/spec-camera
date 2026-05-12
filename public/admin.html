@@ -719,12 +719,17 @@ function connectWS() {
       var slotNum  = parseInt(spectId.replace('SPECT','')) || 0;
       var slot     = spectSlots && spectSlots.find(function(x){ return x.slot===slotNum; });
       var uid      = slot ? slot.uid : null;
-      console.log('[RELAY] Spect viewer registered:', spectId, 'uid:', uid);
+      console.log('[RELAY] Spect viewer registered:', spectId, 'slotNum:', slotNum, 'uid:', uid);
       if(uid){
         var conn = peerConns.get(uid);
         if(conn && conn.stream){
+          console.log('[RELAY] Relaying to', spectId, 'for uid:', uid);
           relayToViewer(uid, conn.stream, spectId);
+        } else {
+          console.log('[RELAY] Player not live yet, uid:', uid, 'conn:', !!conn);
         }
+      } else {
+        console.log('[RELAY] No uid assigned to slot', slotNum, '— assign player first');
       }
     }
 
@@ -773,12 +778,12 @@ async function forwardStreamToViewers(uid, stream) {
     // Forward to booyah cam
     await relayToViewer(uid, stream, 'booyah');
     // Forward to any spect slots currently watching this uid
-    const s = spectAssign || {};
-    for (var slotNum = 1; slotNum <= 6; slotNum++) {
-      var slot = spectSlots && spectSlots.find(function(x){ return x.slot === slotNum; });
-      if (slot && slot.uid === uid) {
-        await relayToViewer(uid, stream, 'SPECT' + slotNum);
-      }
+    if (spectSlots && spectSlots.length) {
+      spectSlots.forEach(async function(slot) {
+        if (slot.uid === uid) {
+          await relayToViewer(uid, stream, 'SPECT' + slot.slot);
+        }
+      });
     }
   }, 500);
 }
@@ -1428,7 +1433,7 @@ async function setSpect(slotNum) {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         roomName: S.roomName, roomPassword: S.roomPassword,
-        adminToken: S.adminToken, spectId: slot.customId, uid: uid || null,
+        adminToken: S.adminToken, spectId: String(slotNum), uid: uid || null,
       }),
     });
     const data = await res.json();
