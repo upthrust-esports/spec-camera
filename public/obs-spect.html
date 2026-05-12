@@ -140,14 +140,23 @@ async function handleRelayOffer(uid, sdp) {
   };
 
   pc.onicecandidate = ({ candidate }) => {
-    if (candidate) send({
-      type: 'relay-ice-back',
-      roomName: ROOM_NAME, roomPassword: ROOM_PASS,
-      uid, candidate, viewerId: 'SPECT' + SPECT_ID
-    });
+    if (candidate) {
+      console.log('[SPECT'+SPECT_ID+'] Sending relay-ice-back type:', candidate.type);
+      send({
+        type: 'relay-ice-back',
+        roomName: ROOM_NAME, roomPassword: ROOM_PASS,
+        uid, candidate, viewerId: 'SPECT' + SPECT_ID
+      });
+    } else {
+      console.log('[SPECT'+SPECT_ID+'] ICE gathering complete');
+    }
   };
 
   pc.onconnectionstatechange = () => {
+    console.log('[SPECT'+SPECT_ID+'] PC state:', pc.connectionState);
+    if (pc.connectionState === 'connected') {
+      console.log('[SPECT'+SPECT_ID+'] CONNECTED! Stream should show.');
+    }
     if (pc.connectionState==='failed'||pc.connectionState==='disconnected') {
       setWaiting('Stream lost...');
       document.getElementById('waiting').style.display = 'flex';
