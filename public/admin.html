@@ -792,15 +792,17 @@ async function relayStreamToSpect(slotNum, uid) {
 }
 
 async function relayToViewer(uid, stream, viewerId) {
-  // Create a new PC from admin to the viewer
   const iceServers = ICE_SERVERS || [{ urls: 'stun:stun.l.google.com:19302' }];
   const rpc = new RTCPeerConnection({ iceServers });
 
-  // Store relay PC
   if (!relayPCs.has(uid)) relayPCs.set(uid, {});
-  const old = relayPCs.get(uid)[viewerId];
-  if (old) try { old.close(); } catch {}
+  const oldRpc = relayPCs.get(uid)[viewerId];
+  if (oldRpc) try { oldRpc.close(); } catch {}
   relayPCs.get(uid)[viewerId] = rpc;
+
+  // ICE candidate queue — store candidates that arrive before remote description is set
+  rpc._iceQueue = [];
+  rpc._remoteSet = false;
 
   // Add all tracks from the player stream
   stream.getTracks().forEach(track => rpc.addTrack(track, stream));
@@ -846,16 +848,32 @@ async function handleRelayAnswer(uid, viewerId, sdp) {
   console.log('[RELAY] signalingState:', rpc.signalingState);
   if (rpc.signalingState !== 'stable') {
     await rpc.setRemoteDescription(new RTCSessionDescription(sdp));
-    console.log('[RELAY] Answer set for', viewerId, uid);
+    rpc._remoteSet = true;
+    console.log('[RELAY] Answer set for', viewerId, uid, '— draining ICE queue:', rpc._iceQueue.length);
+    // Drain queued ICE candidates
+    for (const c of rpc._iceQueue) {
+      try { await rpc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+    }
+    rpc._iceQueue = [];
   }
 }
 
 async function handleRelayIce(uid, viewerId, candidate) {
   const rpcMap = relayPCs.get(uid);
-  console.log('[RELAY] handleRelayIce uid:', uid, 'viewerId:', viewerId, 'hasMap:', !!rpcMap);
-  if (!rpcMap || !rpcMap[viewerId]) { console.warn('[RELAY] No relay PC found!'); return; }
+  if (!rpcMap || !rpcMap[viewerId]) {
+    console.warn('[RELAY] No relay PC for', viewerId, uid);
+    return;
+  }
+  const rpc = rpcMap[viewerId];
+  if (!rpc._remoteSet) {
+    // Queue ICE until remote description is set
+    rpc._iceQueue = rpc._iceQueue || [];
+    rpc._iceQueue.push(candidate);
+    console.log('[RELAY] Queued ICE for', viewerId, uid, 'queue size:', rpc._iceQueue.length);
+    return;
+  }
   try {
-    await rpcMap[viewerId].addIceCandidate(new RTCIceCandidate(candidate));
+    await rpc.addIceCandidate(new RTCIceCandidate(candidate));
     console.log('[RELAY] ICE added for', viewerId, uid);
   } catch(e) { console.error('[RELAY] ICE error:', e); }
 }
