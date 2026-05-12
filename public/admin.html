@@ -799,6 +799,7 @@ async function relayToViewer(uid, stream, viewerId) {
   const oldRpc = relayPCs.get(uid)[viewerId];
   if (oldRpc) try { oldRpc.close(); } catch {}
   relayPCs.get(uid)[viewerId] = rpc;
+  console.log('[RELAY] Stored relay PC uid:', uid, 'viewerId:', viewerId, 'keys:', Object.keys(relayPCs.get(uid)));
 
   // ICE candidate queue — store candidates that arrive before remote description is set
   rpc._iceQueue = [];
@@ -842,7 +843,7 @@ async function relayToViewer(uid, stream, viewerId) {
 // Called from WS message handler
 async function handleRelayAnswer(uid, viewerId, sdp) {
   const rpcMap = relayPCs.get(uid);
-  console.log('[RELAY] handleRelayAnswer uid:', uid, 'viewerId:', viewerId, 'hasMap:', !!rpcMap, 'hasPC:', !!(rpcMap&&rpcMap[viewerId]));
+  console.log('[RELAY] handleRelayAnswer uid:', uid, 'viewerId:', viewerId, 'hasMap:', !!rpcMap, 'hasPC:', !!(rpcMap&&rpcMap[viewerId]), 'keys:', rpcMap?Object.keys(rpcMap):[]);
   if (!rpcMap || !rpcMap[viewerId]) return;
   const rpc = rpcMap[viewerId];
   console.log('[RELAY] signalingState:', rpc.signalingState);
