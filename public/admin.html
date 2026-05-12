@@ -1428,6 +1428,7 @@ async function setSpect(slotNum) {
   slot.uid = uid;
   saveSpectSlots();
 
+  console.log('[SPECT SET] token:', S.adminToken ? S.adminToken.slice(0,8)+'...' : 'MISSING', 'room:', S.roomName);
   try {
     const res = await fetch(API + '/api/spect/set', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -1437,8 +1438,9 @@ async function setSpect(slotNum) {
       }),
     });
     const data = await res.json();
-    if (!res.ok) toast(data.error);
-  } catch {}
+    if (!res.ok) { console.error('[SPECT SET] 403 error:', data); toast(data.error); }
+    else console.log('[SPECT SET] OK spectators:', data.spectators);
+  } catch(e) { console.error('[SPECT SET] fetch error:', e); }
 
   renderSpectGrid();
   const cam = uid ? S.cameras.find(c => c.uid === uid) : null;
