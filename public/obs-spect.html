@@ -79,9 +79,14 @@ function connectWS() {
 
     // relay-offer from admin — admin is forwarding player stream to us
     if (msg.type === 'relay-offer') {
-      console.log('[SPECT'+SPECT_ID+'] relay-offer for uid:', msg.uid);
+      console.log('[SPECT'+SPECT_ID+'] relay-offer for uid:', msg.uid, 'sdp:', msg.sdp ? 'present' : 'MISSING');
       currentUid = msg.uid;
-      await handleRelayOffer(msg.uid, msg.sdp);
+      try {
+        await handleRelayOffer(msg.uid, msg.sdp);
+        console.log('[SPECT'+SPECT_ID+'] handleRelayOffer completed');
+      } catch(e) {
+        console.error('[SPECT'+SPECT_ID+'] handleRelayOffer ERROR:', e);
+      }
     }
 
     // relay-ice from admin
@@ -149,14 +154,20 @@ async function handleRelayOffer(uid, sdp) {
     }
   };
 
-  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  send({
-    type:'relay-answer',
-    roomName:ROOM_NAME, roomPassword:ROOM_PASS,
-    uid, sdp:pc.localDescription, viewerId:'SPECT'+SPECT_ID
-  });
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    console.log('[SPECT'+SPECT_ID+'] setRemoteDescription OK');
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    console.log('[SPECT'+SPECT_ID+'] created answer, sending relay-answer');
+    send({
+      type:'relay-answer',
+      roomName:ROOM_NAME, roomPassword:ROOM_PASS,
+      uid, sdp:pc.localDescription, viewerId:'SPECT'+SPECT_ID
+    });
+  } catch(e) {
+    console.error('[SPECT'+SPECT_ID+'] SDP error:', e);
+  }
 }
 
 function clearStream() {
