@@ -433,13 +433,17 @@ wss.on('connection', (ws) => {
       const uid = (spectators.get(key)||{})[msg.spectId] || null;
       sendTo(ws, { type:'obs-registered', spectId: msg.spectId, uid });
       // Notify admins so they can relay the correct stream to this spect
-      broadcastAdmins(key, { type:'spect-viewer-registered', spectId: msg.spectId, uid });
+      const _slotNum = parseInt(String(msg.spectId).replace(/[^0-9]/g,'')) || 0;
+      broadcastAdmins(key, { type:'spect-viewer-registered', spectId: 'SPECT'+_slotNum, uid });
       return;
     }
 
     // obs-ready: spect viewer is ready, tell admin to relay the stream
     if (msg.type === 'obs-ready') {
-      const spectId = 'SPECT' + msg.spectId;
+      // Normalize to SPECT{n} format
+      const rawId   = String(msg.spectId || '');
+      const slotNum = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
+      const spectId = 'SPECT' + slotNum;
       broadcastAdmins(key, { type:'spect-viewer-registered', spectId, uid: msg.uid });
       return;
     }
@@ -502,7 +506,9 @@ wss.on('connection', (ws) => {
       if (viewerId === 'booyah') {
         getPeers(key).forEach((pws, id) => { if (id.startsWith('booyah:')) targetWs = pws; });
       } else {
-        targetWs = getPeers(key).get('obs:' + viewerId);
+        // viewerId may be 'SPECT1' or '1' — obs peers are stored as 'obs:1'
+      const _vid = String(viewerId).replace('SPECT','');
+      targetWs = getPeers(key).get('obs:' + _vid) || getPeers(key).get('obs:' + viewerId);
       }
       if (targetWs) {
         sendTo(targetWs, { type:'relay-offer', uid: msg.uid, sdp: msg.sdp, viewerId });
@@ -529,7 +535,9 @@ wss.on('connection', (ws) => {
       if (viewerId === 'booyah') {
         getPeers(key).forEach((pws, id) => { if (id.startsWith('booyah:')) targetWs = pws; });
       } else {
-        targetWs = getPeers(key).get('obs:' + viewerId);
+        // viewerId may be 'SPECT1' or '1' — obs peers are stored as 'obs:1'
+      const _vid = String(viewerId).replace('SPECT','');
+      targetWs = getPeers(key).get('obs:' + _vid) || getPeers(key).get('obs:' + viewerId);
       }
       if (targetWs) sendTo(targetWs, { type:'relay-ice', uid: msg.uid, candidate: msg.candidate, viewerId });
       else console.log('[RELAY-ICE] No target for viewerId:', viewerId);
@@ -554,7 +562,9 @@ wss.on('connection', (ws) => {
           if (id.startsWith('booyah:')) targetWs = pws;
         });
       } else if (viewerId.startsWith('obs') || viewerId.startsWith('SPECT')) {
-        targetWs = getPeers(key).get('obs:' + viewerId);
+        // viewerId may be 'SPECT1' or '1' — obs peers are stored as 'obs:1'
+      const _vid = String(viewerId).replace('SPECT','');
+      targetWs = getPeers(key).get('obs:' + _vid) || getPeers(key).get('obs:' + viewerId);
       }
       if (targetWs) {
         sendTo(targetWs, { type:'viewer-offer', uid: msg.uid, sdp: msg.sdp, viewerId });

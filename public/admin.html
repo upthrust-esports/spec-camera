@@ -746,8 +746,10 @@ function connectWS() {
 
     // Spect viewer connected — relay the correct player stream to it
     if(msg.type==='spect-viewer-registered'){
-      var spectId  = msg.spectId;
-      var slotNum  = parseInt(spectId.replace('SPECT','')) || 0;
+      // Normalize spectId to always be 'SPECT{n}' format
+      var rawId    = msg.spectId || '';
+      var slotNum  = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
+      var spectId  = 'SPECT' + slotNum;
       var slot     = spectSlots && spectSlots.find(function(x){ return x.slot===slotNum; });
       var uid      = slot ? slot.uid : null;
       console.log('[RELAY] Spect viewer registered:', spectId, 'slotNum:', slotNum, 'uid:', uid);
