@@ -778,12 +778,17 @@ async function relayToViewer(uid, stream, viewerId) {
   stream.getTracks().forEach(track => rpc.addTrack(track, stream));
 
   rpc.onicecandidate = ({ candidate }) => {
-    if (candidate) wsSend({
-      type: 'relay-ice',
-      roomName: S.roomName, roomPassword: S.roomPassword,
-      adminToken: S.adminToken,
-      uid, viewerId, candidate
-    });
+    if (candidate) {
+      console.log('[RELAY] Sending relay-ice to', viewerId, 'for uid:', uid, 'type:', candidate.type);
+      wsSend({
+        type: 'relay-ice',
+        roomName: S.roomName, roomPassword: S.roomPassword,
+        adminToken: S.adminToken,
+        uid, viewerId, candidate
+      });
+    } else {
+      console.log('[RELAY] ICE gathering complete for', viewerId, uid);
+    }
   };
 
   rpc.onconnectionstatechange = () => {
@@ -807,8 +812,10 @@ async function relayToViewer(uid, stream, viewerId) {
 // Called from WS message handler
 async function handleRelayAnswer(uid, viewerId, sdp) {
   const rpcMap = relayPCs.get(uid);
+  console.log('[RELAY] handleRelayAnswer uid:', uid, 'viewerId:', viewerId, 'hasMap:', !!rpcMap, 'hasPC:', !!(rpcMap&&rpcMap[viewerId]));
   if (!rpcMap || !rpcMap[viewerId]) return;
   const rpc = rpcMap[viewerId];
+  console.log('[RELAY] signalingState:', rpc.signalingState);
   if (rpc.signalingState !== 'stable') {
     await rpc.setRemoteDescription(new RTCSessionDescription(sdp));
     console.log('[RELAY] Answer set for', viewerId, uid);
@@ -817,8 +824,12 @@ async function handleRelayAnswer(uid, viewerId, sdp) {
 
 async function handleRelayIce(uid, viewerId, candidate) {
   const rpcMap = relayPCs.get(uid);
-  if (!rpcMap || !rpcMap[viewerId]) return;
-  try { await rpcMap[viewerId].addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+  console.log('[RELAY] handleRelayIce uid:', uid, 'viewerId:', viewerId, 'hasMap:', !!rpcMap);
+  if (!rpcMap || !rpcMap[viewerId]) { console.warn('[RELAY] No relay PC found!'); return; }
+  try {
+    await rpcMap[viewerId].addIceCandidate(new RTCIceCandidate(candidate));
+    console.log('[RELAY] ICE added for', viewerId, uid);
+  } catch(e) { console.error('[RELAY] ICE error:', e); }
 }
 
 // When player disconnects, close relay PCs

@@ -223,10 +223,14 @@ const teamLogos    = {};
 
 function connectWS(){
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+  ws.onopen  = () => {
+    console.log('[BOOYAH] WS connected, registering...');
+    send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+  };
   ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
+    console.log('[BOOYAH] WS msg:', msg.type, msg.uid||'');
     if(msg.type === 'booyah-detected'){
       booyahShown = true;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
@@ -258,19 +262,20 @@ async function showBooyah(teamName, teamLogoUrl, players){
   // Load players from API if none provided
   if(!players || !players.length){
     try{
-      var res = await fetch('/api/spect/booyah-players?room='+encodeURIComponent(ROOM)+'&pass='+encodeURIComponent(PASS));
+      var res = await fetch('/api/spect/booyah-players?room=test&pass=test');
       var data = await res.json();
+      console.log('[BOOYAH] API players:', JSON.stringify(data));
       if(data.players && data.players.length){
         players = data.players;
         if(!teamName && players[0] && players[0].team) teamName = players[0].team;
       }
-    }catch(e){}
+    }catch(e){ console.error('[BOOYAH] API error:', e); }
     if(!players || !players.length){
       players = [
-        {uid:'',playerName:'PLAYER 1'},
-        {uid:'',playerName:'PLAYER 2'},
-        {uid:'',playerName:'PLAYER 3'},
-        {uid:'',playerName:'PLAYER 4'}
+        {uid:'',playerName:'SLOT 1'},
+        {uid:'',playerName:'SLOT 2'},
+        {uid:'',playerName:'SLOT 3'},
+        {uid:'',playerName:'SLOT 4'}
       ];
     }
   }
@@ -352,6 +357,7 @@ async function showBooyah(teamName, teamLogoUrl, players){
 
 // Handle relay-offer from admin (admin is forwarding player stream to us)
 async function handleRelayOffer(uid, sdp, viewerId){
+  console.log('[BOOYAH] handleRelayOffer uid:', uid, 'viewerId:', viewerId);
   if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
   var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
   var pc = new RTCPeerConnection({ iceServers: iceServers });
@@ -372,11 +378,16 @@ async function handleRelayOffer(uid, sdp, viewerId){
   };
 
   pc.onicecandidate = function(ev){
-    if(ev.candidate) send({
-      type:'relay-ice-back',
-      roomName:ROOM, roomPassword:PASS,
-      uid:uid, candidate:ev.candidate, viewerId: viewerId||'booyah'
-    });
+    if(ev.candidate){
+      console.log('[BOOYAH] Sending relay-ice-back for uid:', uid, 'type:', ev.candidate.type);
+      send({
+        type:'relay-ice-back',
+        roomName:ROOM, roomPassword:PASS,
+        uid:uid, candidate:ev.candidate, viewerId: viewerId||'booyah'
+      });
+    } else {
+      console.log('[BOOYAH] ICE gathering complete for uid:', uid);
+    }
   };
 
   pc.onconnectionstatechange = function(){
