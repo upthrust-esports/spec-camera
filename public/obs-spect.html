@@ -2,217 +2,189 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>OBS Spectator Feed</title>
+<title>OBS Spect</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
-    width: 100%; height: 100%;
-    background: transparent;
+    width:100%; height:100%;
+    background: transparent !important;
     overflow: hidden;
   }
-  video {
-    width: 100%; height: 100%;
+  #feed {
+    width:100%; height:100%;
     object-fit: cover;
     display: block;
-    background: #000;
+    background: transparent;
   }
-  #waiting {
-    position: fixed; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 10px;
-    background: #000; color: #333;
-    font-family: monospace; font-size: 13px;
+  /* Transparent when no stream — OBS will show nothing */
+  body.no-stream {
+    background: transparent !important;
   }
-  #waiting .dot { animation: blink 1.2s infinite; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  body.no-stream #feed {
+    display: none;
+  }
 </style>
 </head>
-<body>
-
-<video id="feed" autoplay playsinline muted></video>
-<div id="waiting">
-  <span class="dot">● </span>
-  <span id="wait-msg">Waiting for spectator...</span>
-</div>
+<body class="no-stream">
+<video id="feed" autoplay playsinline muted="false"></video>
 
 <script>
-// ── Detect spect ID from URL path (/spect1, /spect2 ... /spect6) ─────────────
 const pathMatch  = location.pathname.match(/spect(\d+)/i);
 const SPECT_ID   = pathMatch ? pathMatch[1] : '1';
 const ROOM_NAME  = 'test';
 const ROOM_PASS  = 'test';
-const API        = location.origin;
 const WS_URL     = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
 
-let ws = null;
-let pc = null;
+let ws         = null;
 let currentUid = null;
+let pc         = null;          // active peer connection
+let nextPc     = null;          // pre-warming next connection
+let iceServers = [{ urls:'stun:stun.l.google.com:19302' }];
 
-// ── WebSocket ─────────────────────────────────────────────────────────────────
+// Load TURN config once
+(async function(){
+  try {
+    const d = await (await fetch('/api/turn-config')).json();
+    if (d.iceServers) iceServers = d.iceServers;
+  } catch {}
+  connectWS();
+})();
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
 function connectWS() {
   ws = new WebSocket(WS_URL);
-
   ws.onopen = () => {
-    // Register as an OBS spectator viewer
-    send({ type: 'register-obs', roomName: ROOM_NAME, roomPassword: ROOM_PASS, spectId: SPECT_ID });
+    send({ type:'register-obs', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID });
   };
-
+  ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
 
-    // Server tells us which player this spectator is watching
-    if ((msg.type === 'spect-update' && msg.spectId === SPECT_ID) ||
-        (msg.type === 'spect-update-all' && msg.spectators && msg.spectators[SPECT_ID])) {
-      const newUid = msg.uid || (msg.spectators && msg.spectators[SPECT_ID]);
-      if (newUid !== currentUid) {
-        currentUid = newUid;
-        if (newUid) {
-          setWaiting('Waiting for stream...');
-          requestStream(newUid);
-        } else {
-          setWaiting('Spect ' + SPECT_ID + ' — not assigned');
-          clearStream();
-        }
+    // Initial assignment on register
+    if (msg.type === 'obs-registered') {
+      if (msg.uid && msg.uid !== currentUid) {
+        currentUid = msg.uid;
+        send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:msg.uid });
+      } else if (!msg.uid) {
+        showTransparent();
       }
     }
 
-    // relay-offer from admin — admin is forwarding player stream to us
-    if (msg.type === 'relay-offer') {
-      console.log('[SPECT'+SPECT_ID+'] relay-offer for uid:', msg.uid, 'sdp:', msg.sdp ? 'present' : 'MISSING');
-      currentUid = msg.uid;
-      try {
-        await handleRelayOffer(msg.uid, msg.sdp);
-        console.log('[SPECT'+SPECT_ID+'] handleRelayOffer completed');
-      } catch(e) {
-        console.error('[SPECT'+SPECT_ID+'] handleRelayOffer ERROR:', e);
+    // Spect assignment changed — instant switch
+    if (msg.type === 'spect-update' && msg.spectId === SPECT_ID) {
+      const newUid = msg.uid;
+      if (newUid && newUid !== currentUid) {
+        currentUid = newUid;
+        send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:newUid });
+      } else if (!newUid) {
+        currentUid = null;
+        closePc();
+        showTransparent();
       }
+    }
+
+    // FF API auto-update
+    if (msg.type === 'spect-update-all' && msg.spectators) {
+      const newUid = msg.spectators[SPECT_ID];
+      if (newUid && newUid !== currentUid) {
+        currentUid = newUid;
+        send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:newUid });
+      } else if (!newUid && currentUid) {
+        currentUid = null;
+        closePc();
+        showTransparent();
+      }
+    }
+
+    // relay-offer from admin — answer immediately, no waiting
+    if (msg.type === 'relay-offer') {
+      await handleRelayOffer(msg.uid, msg.sdp);
     }
 
     // relay-ice from admin
     if (msg.type === 'relay-ice') {
-      try { if (pc) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch(e) {}
+      if (pc) try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch {}
     }
+  };
+}
 
-    if (msg.type === 'obs-registered') {
-      if (msg.uid) {
-        currentUid = msg.uid;
-        requestStream(msg.uid);
-      } else {
-        setWaiting('Spect ' + SPECT_ID + ' — waiting for assignment');
+// ── Handle relay offer — instant, no loading screen ─────────────────────────
+async function handleRelayOffer(uid, sdp) {
+  // Close old PC without showing transparent — new stream coming right away
+  if (pc) { try { pc.close(); } catch {} pc = null; }
+
+  const newPc = new RTCPeerConnection({ iceServers });
+
+  newPc.ontrack = (event) => {
+    const vid = document.getElementById('feed');
+    vid.srcObject = event.streams[0];
+    // Show instantly — no delay
+    document.body.classList.remove('no-stream');
+    console.log('[SPECT'+SPECT_ID+'] Stream live for uid:', uid);
+  };
+
+  newPc.onicecandidate = ({ candidate }) => {
+    if (candidate) send({
+      type: 'relay-ice-back',
+      roomName: ROOM_NAME, roomPassword: ROOM_PASS,
+      uid, candidate, viewerId: 'SPECT' + SPECT_ID
+    });
+  };
+
+  newPc.onconnectionstatechange = () => {
+    console.log('[SPECT'+SPECT_ID+']', newPc.connectionState);
+    if (newPc.connectionState === 'failed' || newPc.connectionState === 'disconnected') {
+      if (pc === newPc) {
+        // Only go transparent if no replacement is coming
+        setTimeout(() => {
+          if (pc === newPc || !pc) showTransparent();
+        }, 3000);
       }
     }
-
-    if (msg.type === 'player-stream-ready') {
-      // player is online and stream is available
-    }
-  };
-
-  ws.onclose = () => {
-    setWaiting('Disconnected — reconnecting...');
-    setTimeout(connectWS, 3000);
-  };
-}
-
-// ── Request stream from a specific player ─────────────────────────────────────
-async function requestStream(uid) {
-  clearStream();
-  currentUid = uid;
-  setWaiting('Waiting for stream...');
-  // Tell server we are ready — admin will send relay-offer
-  send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid });
-}
-
-async function handleRelayOffer(uid, sdp) {
-  if (pc) { try{pc.close();}catch{} pc=null; }
-  setWaiting('Connecting...');
-  let iceServers = [{ urls:'stun:stun.l.google.com:19302' }];
-  try {
-    const td = await (await fetch('/api/turn-config')).json();
-    if (td.iceServers) iceServers = td.iceServers;
-  } catch {}
-
-  pc = new RTCPeerConnection({ iceServers });
-
-  pc.ontrack = (event) => {
-    document.getElementById('feed').srcObject = event.streams[0];
-    document.getElementById('waiting').style.display = 'none';
-  };
-
-  pc.onicecandidate = ({ candidate }) => {
-    if (candidate) {
-      console.log('[SPECT'+SPECT_ID+'] Sending relay-ice-back type:', candidate.type);
-      send({
-        type: 'relay-ice-back',
-        roomName: ROOM_NAME, roomPassword: ROOM_PASS,
-        uid, candidate, viewerId: 'SPECT' + SPECT_ID
-      });
-    } else {
-      console.log('[SPECT'+SPECT_ID+'] ICE gathering complete');
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    console.log('[SPECT'+SPECT_ID+'] PC state:', pc.connectionState);
-    if (pc.connectionState === 'connected') {
-      console.log('[SPECT'+SPECT_ID+'] CONNECTED! Stream should show.');
-    }
-    if (pc.connectionState==='failed'||pc.connectionState==='disconnected') {
-      setWaiting('Stream lost...');
-      document.getElementById('waiting').style.display = 'flex';
-    }
   };
 
   try {
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    console.log('[SPECT'+SPECT_ID+'] setRemoteDescription OK');
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    console.log('[SPECT'+SPECT_ID+'] created answer, sending relay-answer');
+    await newPc.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await newPc.createAnswer();
+    await newPc.setLocalDescription(answer);
     send({
-      type:'relay-answer',
-      roomName:ROOM_NAME, roomPassword:ROOM_PASS,
-      uid, sdp:pc.localDescription, viewerId:'SPECT'+SPECT_ID
+      type: 'relay-answer',
+      roomName: ROOM_NAME, roomPassword: ROOM_PASS,
+      uid, sdp: newPc.localDescription, viewerId: 'SPECT' + SPECT_ID
     });
+    pc = newPc;
   } catch(e) {
-    console.error('[SPECT'+SPECT_ID+'] SDP error:', e);
+    console.error('[SPECT'+SPECT_ID+'] offer error:', e);
+    showTransparent();
   }
 }
 
-function clearStream() {
-  if (pc) { pc.close(); pc = null; }
+function closePc() {
+  if (pc) { try { pc.close(); } catch {} pc = null; }
+}
+
+function showTransparent() {
   const vid = document.getElementById('feed');
   vid.srcObject = null;
-  document.getElementById('waiting').style.display = 'flex';
+  document.body.classList.add('no-stream');
+  console.log('[SPECT'+SPECT_ID+'] Transparent — no stream');
 }
 
-function setWaiting(msg) {
-  document.getElementById('wait-msg').textContent = msg;
-}
-
-function send(obj) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
-}
-
-// ── Poll API as fallback (in case WS misses update) ──────────────────────────
-async function pollSpect() {
+// Poll API as fallback every 3s
+setInterval(async () => {
   try {
-    const res  = await fetch(`${API}/api/spect/${SPECT_ID}?roomName=${encodeURIComponent(ROOM_NAME)}&roomPassword=${encodeURIComponent(ROOM_PASS)}`);
+    const res  = await fetch('/api/spect/'+SPECT_ID+'?roomName='+encodeURIComponent(ROOM_NAME)+'&roomPassword='+encodeURIComponent(ROOM_PASS));
     const data = await res.json();
     if (data.uid && data.uid !== currentUid) {
       currentUid = data.uid;
-      requestStream(data.uid);
-    } else if (!data.uid && currentUid) {
+      send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:data.uid });
+    } else if (!data.uid && currentUid && document.body.classList.contains('no-stream')) {
       currentUid = null;
-      clearStream();
-      setWaiting('Spect ' + SPECT_ID + ' — not watching anyone');
     }
   } catch {}
-}
+}, 3000);
 
-connectWS();
-// Poll every 2 seconds as fallback
-setInterval(pollSpect, 2000);
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 </script>
 </body>
 </html>
