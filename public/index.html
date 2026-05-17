@@ -342,10 +342,23 @@ function connectWS() {
 // ── Camera & WebRTC ───────────────────────────────────────────────────────────
 async function startCamera() {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal:1280 }, height: { ideal:720 }, frameRate: { ideal:30 } },
-      audio: true,
-    });
+    // Try highest quality first, fallback to 720p
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width:     { ideal: 1920, min: 640 },
+          height:    { ideal: 1080, min: 480 },
+          frameRate: { ideal: 30, min: 15 },
+        },
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
+      });
+    } catch {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        audio: true,
+      });
+    }
 
     const vid = document.getElementById('local-video');
     vid.srcObject = localStream;
@@ -438,6 +451,28 @@ function createPeerConnection() {
   // Add all tracks
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
+  // Prefer VP9 codec for better quality/compression
+  if (RTCRtpSender.getCapabilities) {
+    try {
+      const caps = RTCRtpSender.getCapabilities('video');
+      if (caps) {
+        // Priority: VP9 > H264 > VP8
+        const preferred = ['VP9', 'H264', 'VP8'];
+        const sorted = [...caps.codecs].sort((a, b) => {
+          const ai = preferred.indexOf(a.mimeType.split('/')[1].toUpperCase());
+          const bi = preferred.indexOf(b.mimeType.split('/')[1].toUpperCase());
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+        const transceivers = pc.getTransceivers();
+        for (const t of transceivers) {
+          if (t.sender.track && t.sender.track.kind === 'video') {
+            try { t.setCodecPreferences(sorted); } catch {}
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
   // Send ICE candidates to admin via server
   pc.onicecandidate = ({ candidate }) => {
     if (candidate) {
@@ -446,16 +481,33 @@ function createPeerConnection() {
     }
   };
 
-  pc.onconnectionstatechange = () => {
+  pc.onconnectionstatechange = async () => {
     const s = pc.connectionState;
     document.getElementById('ci-conn').textContent = s.toUpperCase();
     if (s === 'connected') {
       setStatus('live', 'LIVE');
-      // Stop retry once connected
       if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+      // Set max bitrate for highest quality
+      try {
+        const senders = pc.getSenders();
+        for (const sender of senders) {
+          if (sender.track && sender.track.kind === 'video') {
+            const params = sender.getParameters();
+            if (!params.encodings || !params.encodings.length) {
+              params.encodings = [{}];
+            }
+            // Request up to 4Mbps for 1080p quality
+            params.encodings[0].maxBitrate = 4000000;
+            params.encodings[0].maxFramerate = 30;
+            params.encodings[0].networkPriority = 'high';
+            await sender.setParameters(params);
+            console.log('[QUALITY] Video bitrate set to 4Mbps');
+          }
+        }
+      } catch(e) { console.log('[QUALITY] setParameters not supported:', e.message); }
     } else if (s === 'failed' || s === 'disconnected') {
       setStatus('error', s.toUpperCase());
-      startRetry(); // restart retry on failure
+      startRetry();
     }
   };
 
