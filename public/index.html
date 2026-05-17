@@ -93,7 +93,7 @@
 <body>
 
 <header>
-  <div class="logo">UE</div>
+  <div class="logo">UP</div>
   <h1>Player <span>Camera</span></h1>
   <div class="hright"><a href="/admin.html" class="admin-link">⚙ Operator</a></div>
 </header>
@@ -103,7 +103,7 @@
   <!-- LOGIN -->
   <div id="v-login">
     <div class="card">
-      <h2>🎮 Join Room 🎮</h2>
+      <h2>🎮 Join Room</h2>
       <p>Enter your Free Fire UID to join. Your camera will be shared automatically with the operator.</p>
       <div class="fg"><label>Your Free Fire UID</label><input id="p-uid" placeholder="Your FF UID" autocomplete="off" onkeydown="if(event.key==='Enter')joinRoom()"/></div>
       <button class="btn btn-p" onclick="joinRoom()">🎮 JOIN & SHARE CAMERA</button>
@@ -257,6 +257,13 @@ function connectWS() {
 
   ws.onopen = () => {
     wsSend({ type:'register-player', roomName: S.roomName, roomPassword: S.roomPassword, uid: S.uid });
+    // If camera was running before WS disconnect, renegotiate after re-register
+    if (localStream) {
+      setTimeout(async () => {
+        console.log('[WS] Reconnected, renegotiating...');
+        await renegotiate();
+      }, 2000);
+    }
   };
 
   ws.onmessage = async (e) => {
@@ -274,6 +281,8 @@ function connectWS() {
     }
 
     // Admin force-disconnected this camera
+    if (msg.type === 'pong') { /* keepalive ack */ }
+
     if (msg.type === 'force-disconnect') {
       if (localStream) localStream.getTracks().forEach(t => t.stop());
       if (pc) pc.close();
@@ -353,6 +362,8 @@ async function startCamera() {
 
     createPeerConnection();
     startRetry();
+    startKeepalive();
+    lastConnected = Date.now();
     toast('Camera active!');
   } catch (err) {
     toast('❌ Camera: ' + err.message);
@@ -370,8 +381,11 @@ async function renegotiate() {
   } catch(e) { console.error('renegotiate:', e); }
 }
 
-// Retry connection every 8 seconds if still not connected
-let retryInterval = null;
+// ── Keepalive + auto-reconnect system ────────────────────────────────────────
+let retryInterval  = null;
+let keepaliveTimer = null;
+let lastConnected  = 0;
+
 function startRetry() {
   if (retryInterval) return;
   retryInterval = setInterval(async () => {
@@ -380,13 +394,40 @@ function startRetry() {
     if (state === 'connected') {
       clearInterval(retryInterval);
       retryInterval = null;
+      lastConnected = Date.now();
       return;
     }
     if (state === 'failed' || state === 'disconnected' || state === 'new' || state === 'connecting') {
-      console.log('[RETRY] Re-sending offer, state:', state);
+      console.log('[RETRY] Reconnecting, state:', state);
       await renegotiate();
     }
   }, 8000);
+}
+
+function startKeepalive() {
+  if (keepaliveTimer) return;
+  keepaliveTimer = setInterval(async () => {
+    if (!pc || !localStream) return;
+    const state = pc.connectionState;
+
+    // Send WS ping to keep server connection alive
+    wsSend({ type:'ping', roomName:S.roomName, roomPassword:S.roomPassword, uid:S.uid });
+
+    if (state === 'connected') {
+      lastConnected = Date.now();
+    } else if (state === 'failed' || state === 'disconnected') {
+      console.log('[KEEPALIVE] Connection lost, reconnecting...');
+      await renegotiate();
+    } else if (state === 'connecting' && Date.now() - lastConnected > 20000) {
+      // Stuck connecting for 20s — force reconnect
+      console.log('[KEEPALIVE] Stuck connecting, forcing reconnect...');
+      await renegotiate();
+    }
+  }, 15000); // Check every 15 seconds
+}
+
+function stopKeepalive() {
+  if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
 }
 
 function createPeerConnection() {
@@ -489,6 +530,7 @@ function leaveRoom() {
   pcMap.forEach(vpc => { try{vpc.close();}catch{} });
   pcMap.clear();
   if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+  stopKeepalive();
   S = { roomName:'', roomPassword:'', uid:'', playerName:'', slot:null };
   document.getElementById('v-live').style.display  = 'none';
   document.getElementById('v-login').style.display = 'flex';

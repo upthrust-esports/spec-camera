@@ -378,6 +378,12 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // ── Ping / keepalive ─────────────────────────────────────────────────────
+    if (msg.type === 'ping') {
+      sendTo(ws, { type:'pong' });
+      return;
+    }
+
     if (msg.type === 'register-player') {
       if (!rooms.has(key)) return sendTo(ws, { type:'error', message:'Room not found' });
       const reg = (playerCameras.get(key)||[]).find(c => c.uid === msg.uid);
