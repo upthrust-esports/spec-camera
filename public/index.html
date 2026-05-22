@@ -93,7 +93,7 @@
 <body>
 
 <header>
-  <div class="logo">UP</div>
+  <div class="logo">UE</div>
   <h1>Player <span>Camera</span></h1>
   <div class="hright"><a href="/admin.html" class="admin-link">⚙ Operator</a></div>
 </header>
@@ -106,6 +106,7 @@
       <h2>🎮 Join Room</h2>
       <p>Enter your Free Fire UID to join. Your camera will be shared automatically with the operator.</p>
       <div class="fg"><label>Your Free Fire UID</label><input id="p-uid" placeholder="Your FF UID" autocomplete="off" onkeydown="if(event.key==='Enter')joinRoom()"/></div>
+      <div class="fg"><label>Operator Password</label><input id="p-pass" type="password" placeholder="Enter password given by operator" onkeydown="if(event.key==='Enter')joinRoom()"/></div>
       <button class="btn btn-p" onclick="joinRoom()">🎮 JOIN & SHARE CAMERA</button>
     </div>
     <div class="hint">Once you join, your browser will request camera & microphone access. Your feed goes directly to the operator — no recording.</div>
@@ -222,15 +223,17 @@ let makingOffer = false;
 
 // ── Join Room ─────────────────────────────────────────────────────────────────
 async function joinRoom() {
-  const uid = v('p-uid');
-  if (!uid) { toast('Enter your UID'); return; }
+  const uid      = v('p-uid');
+  const opPass   = v('p-pass');
+  if (!uid)    { toast('Enter your UID'); return; }
+  if (!opPass) { toast('Enter the operator password'); return; }
 
   toast('Connecting...');
   await loadIceServers();
   try {
     const res  = await fetch(API + '/api/room/player-join', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ uid }),
+      body: JSON.stringify({ uid, operatorPassword: opPass }),
     });
     const data = await res.json();
     if (!res.ok) { toast('❌ ' + (data.error || 'Join failed')); return; }

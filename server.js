@@ -85,8 +85,14 @@ app.post('/api/room/admin-login', (req, res) => {
 
 // ─── REST: Player Join ────────────────────────────────────────────────────────
 app.post('/api/room/player-join', (req, res) => {
-  const { uid } = req.body;
+  const { uid, operatorPassword } = req.body;
   if (!uid) return res.status(400).json({ error: 'UID required' });
+
+  // Validate operator password
+  if (!operatorPassword || operatorPassword !== OPERATOR_PASSWORD) {
+    return res.status(403).json({ error: 'Invalid operator password. Contact your operator.' });
+  }
+
   for (const [key, room] of rooms.entries()) {
     const reg = (playerCameras.get(key) || []).find(c => c.uid === uid);
     if (reg) {
@@ -343,8 +349,30 @@ app.get('/api/spect/:spectId', (req, res) => {
 });
 
 // ─── Admin session ────────────────────────────────────────────────────────────
-const ADMIN_USERNAME = 'angry';
-const ADMIN_PASSWORD = 'angry0306';
+const ADMIN_USERNAME   = 'angry';
+const ADMIN_PASSWORD   = 'angry0306';
+// Operator password — mutable at runtime
+let OPERATOR_PASSWORD = process.env.OPERATOR_PASSWORD || 'upthrust2024';
+
+// ─── REST: Change operator password (admin only) ──────────────────────────────
+app.post('/api/operator-password', (req, res) => {
+  const { username, password, newPassword } = req.body;
+  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD)
+    return res.status(401).json({ error: 'Unauthorized' });
+  if (!newPassword || newPassword.length < 4)
+    return res.status(400).json({ error: 'Password too short (min 4 chars)' });
+  OPERATOR_PASSWORD = newPassword;
+  console.log('[ADMIN] Operator password changed');
+  return res.json({ success: true, message: 'Password updated' });
+});
+
+// ─── REST: Get current operator password (admin only) ─────────────────────────
+app.get('/api/operator-password', (req, res) => {
+  const { username, password } = req.query;
+  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD)
+    return res.status(401).json({ error: 'Unauthorized' });
+  return res.json({ operatorPassword: OPERATOR_PASSWORD });
+});
 
 app.post('/api/admin/session', (req, res) => {
   const { username, password } = req.body;
