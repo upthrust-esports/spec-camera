@@ -127,6 +127,19 @@ function connectWS(){
       peers.clear();
       await showBooyah('', null, []);
     }
+    // Admin confirmed booyah cam is registered — request all current streams
+    if(msg.type === 'booyah-registered'){
+      console.log('[BOOYAH] Registered with server, requesting streams...');
+      // Re-request streams for all current players in grid
+      document.querySelectorAll('.cam-cell video[id]').forEach(function(vid){
+        var uid = vid.id.replace('bvid-','');
+        if(uid) {
+          console.log('[BOOYAH] Requesting stream for uid:', uid);
+          send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'booyah', uid:uid});
+        }
+      });
+    }
+
     if(msg.type === 'relay-offer'){
       await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId);
     }
@@ -193,6 +206,11 @@ async function showBooyah(teamName, teamLogoUrl, players){
     }
 
     grid.appendChild(cell);
+
+    // Request stream from admin relay for this player
+    if(uid) {
+      send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'booyah', uid:uid});
+    }
   });
 }
 

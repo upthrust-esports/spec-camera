@@ -474,11 +474,18 @@ wss.on('connection', (ws) => {
 
     // obs-ready: spect viewer is ready, tell admin to relay the stream
     if (msg.type === 'obs-ready') {
-      // Normalize to SPECT{n} format
-      const rawId   = String(msg.spectId || '');
-      const slotNum = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
-      const spectId = 'SPECT' + slotNum;
-      broadcastAdmins(key, { type:'spect-viewer-registered', spectId, uid: msg.uid });
+      const rawId = String(msg.spectId || '');
+      if (rawId === 'booyah') {
+        // Booyah cam requesting stream — tell admin to relay
+        broadcastAdmins(key, { type:'booyah-registered' });
+        // Also tell admin to relay this specific uid to booyah
+        broadcastAdmins(key, { type:'spect-viewer-registered', spectId:'booyah', uid: msg.uid });
+      } else {
+        // Normalize spect slot to SPECT{n} format
+        const slotNum = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
+        const spectId = 'SPECT' + slotNum;
+        broadcastAdmins(key, { type:'spect-viewer-registered', spectId, uid: msg.uid });
+      }
       return;
     }
 

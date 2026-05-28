@@ -760,8 +760,24 @@ function connectWS() {
 
     // Spect viewer connected — relay the correct player stream to it
     if(msg.type==='spect-viewer-registered'){
-      // Normalize spectId to always be 'SPECT{n}' format
-      var rawId    = msg.spectId || '';
+      var rawId   = msg.spectId || '';
+      // Handle booyah cam separately
+      if(rawId === 'booyah'){
+        var uid = msg.uid;
+        console.log('[RELAY] Booyah cam requesting uid:', uid);
+        if(uid){
+          var conn = peerConns.get(uid);
+          if(conn && conn.stream){
+            relayToViewer(uid, conn.stream, 'booyah');
+          }
+        } else {
+          // No specific uid — relay all current streams to booyah
+          peerConns.forEach(function(conn2, uid2){
+            if(conn2 && conn2.stream) relayToViewer(uid2, conn2.stream, 'booyah');
+          });
+        }
+        return;  // skip spect slot logic
+      }
       var slotNum  = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
       var spectId  = 'SPECT' + slotNum;
       var slot     = spectSlots && spectSlots.find(function(x){ return x.slot===slotNum; });
