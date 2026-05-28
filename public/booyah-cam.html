@@ -3,109 +3,28 @@
 <head>
 <meta charset="UTF-8"/>
 <title>Booyah Cam</title>
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0d14;}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#000;}
 
   #stage{
     position:relative;
     width:1920px;height:1080px;
-    background:#0a0d14;
   }
 
-  /* ── Frame image overlay ── */
-  #frame-img{
-    position:absolute;
-    inset:0;
-    width:100%;height:100%;
-    object-fit:fill;
-    pointer-events:none;
-    z-index:20;
-  }
-
-  /* ── Top banner ── */
-  .top-banner{
-    position:absolute;
-    top:0;left:50%;
-    transform:translateX(-50%);
-    z-index:30;
-    display:flex;align-items:center;
-    height:50px;
-  }
-  .banner-inner{
-    background:#c8952a;
-    padding:5px 32px;
-    display:flex;align-items:center;gap:12px;
-    clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 50%,calc(100% - 12px) 100%,12px 100%,0% 50%);
-    min-width:300px;justify-content:center;
-  }
-  .banner-logo{width:28px;height:28px;object-fit:contain;border-radius:3px;}
-  .banner-team{
-    font-family:'Rajdhani',sans-serif;
-    font-size:18px;font-weight:700;
-    color:#0a0d14;letter-spacing:4px;text-transform:uppercase;
-  }
-  .banner-sep{color:rgba(10,13,20,0.5);font-size:14px;}
-  .banner-booyah{
-    font-family:'Rajdhani',sans-serif;
-    font-size:16px;font-weight:700;
-    color:#0a0d14;letter-spacing:5px;text-transform:uppercase;
-  }
-
-  /* ── Grid ── */
+  /* 2x2 camera grid — fills entire stage */
   .grid{
     position:absolute;
-    top:10px;left:10px;right:10px;bottom:10px;
+    inset:0;
     display:grid;
     grid-template-columns:1fr 1fr;
     grid-template-rows:1fr 1fr;
-    gap:0;
   }
 
-  /* ── Divider lines ── */
-  .div-h{
-    position:absolute;
-    left:10px;right:10px;
-    top:50%;height:6px;
-    background:#0a0d14;
-    transform:translateY(-50%);
-    z-index:15;
-  }
-  .div-v{
-    position:absolute;
-    top:10px;bottom:10px;
-    left:50%;width:6px;
-    background:#0a0d14;
-    transform:translateX(-50%);
-    z-index:15;
-  }
-
-  /* ── Center logo circle ── */
-  #center-logo{
-    position:absolute;
-    left:50%;top:50%;
-    transform:translate(-50%,-50%);
-    z-index:25;
-    width:64px;height:64px;
-    border-radius:50%;
-    background:#0a0d14;
-    border:3px solid #c8952a;
-    display:flex;align-items:center;justify-content:center;
-    overflow:hidden;
-  }
-  #center-logo img{width:100%;height:100%;object-fit:contain;}
-  #center-logo .cl-ph{
-    font-family:'Rajdhani',sans-serif;
-    font-size:14px;font-weight:700;
-    color:#c8952a;letter-spacing:1px;
-  }
-
-  /* ── Each cam cell ── */
   .cam-cell{
     position:relative;
     overflow:hidden;
-    background:#06090f;
+    background:#000;
   }
 
   .cam-cell video{
@@ -113,78 +32,53 @@
     object-fit:cover;display:block;
   }
 
-  /* Photo fallback */
   .cam-cell .photo-fb{
     position:absolute;inset:0;
     width:100%;height:100%;
     object-fit:cover;display:block;
   }
 
-  /* Waiting spinner */
   .cell-wait{
     position:absolute;inset:0;
     display:flex;align-items:center;justify-content:center;
-    background:#06090f;
+    background:#000;
   }
   .cell-wait-ring{
     width:40px;height:40px;
-    border:3px solid rgba(200,149,42,0.15);
-    border-top-color:#c8952a;
+    border:2px solid rgba(255,255,255,0.1);
+    border-top-color:rgba(255,255,255,0.4);
     border-radius:50%;
     animation:spin 1s linear infinite;
   }
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* Corner brackets removed — using frame.png */
+  /* Frame PNG on top of everything */
+  #frame-img{
+    position:absolute;
+    inset:0;
+    width:1920px;height:1080px;
+    object-fit:fill;
+    pointer-events:none;
+    z-index:50;
+  }
 
-  /* ── Name bar ── */
-  .name-bar{
-    position:absolute;bottom:0;left:0;right:0;
-    height:28px;
-    background:#c8952a;
-    display:flex;align-items:center;justify-content:space-between;
-    padding:0 14px;
-    z-index:5;
+  /* Waiting state */
+  #waiting{
+    position:fixed;inset:0;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;
+    background:#000;z-index:100;
   }
-  .name-bar .pname{
-    font-family:'Rajdhani',sans-serif;
-    font-size:15px;font-weight:700;
-    color:#0a0d14;letter-spacing:2px;text-transform:uppercase;
-  }
-  .name-bar .live-dot{
-    width:8px;height:8px;border-radius:50%;
-    background:#0a0d14;opacity:0;
-    transition:opacity .3s;
-  }
-  .name-bar .live-dot.on{
-    background:#00c853;opacity:1;
-    animation:ldp 1.2s infinite;
-  }
-  @keyframes ldp{0%,100%{opacity:1}50%{opacity:.3}}
 </style>
 </head>
 <body>
-<div id="stage">
-  <!-- Top banner -->
-  <div class="top-banner">
-    <div class="banner-inner" id="banner-inner">
-      <img class="banner-logo" id="banner-logo-img" src="" style="display:none"/>
-      <span class="banner-team" id="banner-name"></span>
-    </div>
-  </div>
 
-  <!-- Frame image overlay -->
-  <img id="frame-img" src="/frame.png" alt=""/>
+<div id="waiting">
+  <div class="cell-wait-ring"></div>
+</div>
 
-  <!-- Divider lines -->
-  <div class="div-h"></div>
-  <div class="div-v"></div>
-
-  <!-- Center logo circle -->
-  <div id="center-logo"><span class="cl-ph" id="cl-ph">UP</span></div>
-
-  <!-- 4 cam cells -->
+<div id="stage" style="display:none;">
   <div class="grid" id="cam-grid"></div>
+  <img id="frame-img" src="/frame.png" alt=""/>
 </div>
 
 <script>
@@ -200,7 +94,6 @@ const peers = new Map();
 const playerPhotos = {};
 const teamLogos    = {};
 
-// Boot
 (async function(){
   try {
     const [p,l,t] = await Promise.all([
@@ -214,21 +107,16 @@ const teamLogos    = {};
     if(td.iceServers) window.ICE_SERVERS = td.iceServers;
   } catch(e){ console.warn('Boot:', e); }
 
-  // Always show grid immediately
   await showBooyah('', null, []);
   connectWS();
 })();
 
 function connectWS(){
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => {
-    console.log('[BOOYAH] WS connected, registering...');
-    send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
-  };
+  ws.onopen  = () => send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
   ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
-    console.log('[BOOYAH] WS msg:', msg.type, msg.uid||'');
     if(msg.type === 'booyah-detected'){
       booyahShown = true;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
@@ -241,13 +129,8 @@ function connectWS(){
       peers.clear();
       await showBooyah('', null, []);
     }
-    // relay-offer from admin (admin forwards player stream to us)
-    if(msg.type === 'relay-offer'){
-      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId);
-    }
-    // Also handle direct offer (latestOffers fallback)
-    if(msg.type === 'offer'){
-      await handleRelayOffer(msg.uid, msg.sdp, 'booyah');
+    if(msg.type === 'relay-offer' || msg.type === 'offer'){
+      await handleRelayOffer(msg.uid, msg.sdp);
     }
     if(msg.type === 'relay-ice'){
       const conn = peers.get(msg.uid);
@@ -257,105 +140,58 @@ function connectWS(){
 }
 
 async function showBooyah(teamName, teamLogoUrl, players){
-  // Load players from API if none provided
   if(!players || !players.length){
     try{
-      var res = await fetch('/api/spect/booyah-players?room=test&pass=test');
+      var res = await fetch('/api/spect/booyah-players?room='+encodeURIComponent(ROOM)+'&pass='+encodeURIComponent(PASS));
       var data = await res.json();
-      console.log('[BOOYAH] API players:', JSON.stringify(data));
-      if(data.players && data.players.length){
-        players = data.players;
-        if(!teamName && players[0] && players[0].team) teamName = players[0].team;
-      }
-    }catch(e){ console.error('[BOOYAH] API error:', e); }
+      if(data.players && data.players.length) players = data.players;
+    }catch(e){}
     if(!players || !players.length){
-      players = [
-        {uid:'',playerName:'SLOT 1'},
-        {uid:'',playerName:'SLOT 2'},
-        {uid:'',playerName:'SLOT 3'},
-        {uid:'',playerName:'SLOT 4'}
-      ];
+      players = [{uid:'',playerName:''},{uid:'',playerName:''},{uid:'',playerName:''},{uid:'',playerName:''}];
     }
   }
 
-  // Update banner
-  var name = (teamName||'').toUpperCase();
-  document.getElementById('banner-name').textContent = name;
-  var bannerInner = document.getElementById('banner-inner');
-  if(name){
-    bannerInner.innerHTML =
-      '<span class="banner-team">'+escH(name)+'</span>'+
-      '<span class="banner-sep">—</span>'+
-      '<span class="banner-booyah">BOOYAH</span>';
-  } else {
-    bannerInner.innerHTML = '<span class="banner-team" style="letter-spacing:2px;font-size:14px;opacity:.5">PLAYER CAM</span>';
-  }
+  document.getElementById('waiting').style.display = 'none';
+  document.getElementById('stage').style.display   = 'block';
 
-  // Update center logo
-  var logo = teamLogoUrl || getLogo(teamName);
-  var cl = document.getElementById('center-logo');
-  if(logo){
-    cl.innerHTML = '<img src="'+logo+'" style="width:100%;height:100%;object-fit:contain;padding:4px;">';
-  } else {
-    cl.innerHTML = '<span class="cl-ph">'+(name?name.slice(0,3):'UP')+'</span>';
-  }
-
-  // Build 4 cells
   var grid = document.getElementById('cam-grid');
   grid.innerHTML = '';
   var slots = players.slice(0,4);
-  while(slots.length < 4) slots.push({uid:'',playerName:'—'});
+  while(slots.length < 4) slots.push({uid:'',playerName:''});
 
   slots.forEach(function(player){
     var uid   = player ? String(player.uid || '') : '';
-    var pname = player ? (player.playerName || player.nickname || uid || '—') : '—';
     var photo = uid ? (playerPhotos[uid] || null) : null;
 
     var cell = document.createElement('div');
     cell.className = 'cam-cell';
 
-    // Video
     var vid = document.createElement('video');
     vid.autoplay = true; vid.playsInline = true;
     if(uid) vid.id = 'bvid-'+uid;
     cell.appendChild(vid);
 
-    // Photo fallback
     if(photo){
       var img = document.createElement('img');
       img.src = photo; img.className = 'photo-fb';
       if(uid) img.id = 'bphoto-'+uid;
       cell.appendChild(img);
-    } else if(!uid) {
-      // Empty slot — just dark background, no spinner
-    } else {
+    } else if(uid) {
       var w = document.createElement('div'); w.className='cell-wait';
       if(uid) w.id='bcellwait-'+uid;
       var ring = document.createElement('div'); ring.className='cell-wait-ring';
       w.appendChild(ring); cell.appendChild(w);
     }
 
-    // Corner brackets handled by frame.png
-
-    // Name bar
-    var bar = document.createElement('div'); bar.className='name-bar';
-    bar.innerHTML = '<span class="pname">'+escH(pname)+'</span>'
-      +'<span class="live-dot" '+(uid?'id="bld-'+uid+'"':'')+'></span>';
-    cell.appendChild(bar);
-
     grid.appendChild(cell);
-
-    // Connect stream if uid exists
-    // stream will arrive via relay-offer from admin
+    if(uid) requestStream(uid);
   });
 }
 
-// Handle relay-offer from admin (admin is forwarding player stream to us)
-async function handleRelayOffer(uid, sdp, viewerId){
-  console.log('[BOOYAH] handleRelayOffer uid:', uid, 'viewerId:', viewerId);
+async function handleRelayOffer(uid, sdp){
   if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
   var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
-  var pc = new RTCPeerConnection({ iceServers: iceServers });
+  var pc = new RTCPeerConnection({ iceServers });
   peers.set(uid, {pc});
 
   pc.ontrack = function(ev){
@@ -366,44 +202,22 @@ async function handleRelayOffer(uid, sdp, viewerId){
       if(ph) ph.style.display='none';
       var cw = document.getElementById('bcellwait-'+uid);
       if(cw) cw.style.display='none';
-      var ld = document.getElementById('bld-'+uid);
-      if(ld) ld.classList.add('on');
     }
-    console.log('[BOOYAH] Stream received for uid:', uid);
   };
 
   pc.onicecandidate = function(ev){
-    if(ev.candidate){
-      console.log('[BOOYAH] Sending relay-ice-back for uid:', uid, 'type:', ev.candidate.type);
-      send({
-        type:'relay-ice-back',
-        roomName:ROOM, roomPassword:PASS,
-        uid:uid, candidate:ev.candidate, viewerId: viewerId||'booyah'
-      });
-    } else {
-      console.log('[BOOYAH] ICE gathering complete for uid:', uid);
-    }
-  };
-
-  pc.onconnectionstatechange = function(){
-    console.log('[BOOYAH PC '+uid+']', pc.connectionState);
-    if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
-      peers.delete(uid);
-    }
+    if(ev.candidate) send({type:'relay-ice-back',roomName:ROOM,roomPassword:PASS,uid:uid,candidate:ev.candidate,viewerId:'booyah'});
   };
 
   await pc.setRemoteDescription(new RTCSessionDescription(sdp));
   var answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
-  send({
-    type:'relay-answer',
-    roomName:ROOM, roomPassword:PASS,
-    uid:uid, sdp:pc.localDescription, viewerId: viewerId||'booyah'
-  });
-  console.log('[BOOYAH] Sent relay-answer for uid:', uid);
+  send({type:'relay-answer',roomName:ROOM,roomPassword:PASS,uid:uid,sdp:pc.localDescription,viewerId:'booyah'});
 }
 
-// requestStream no longer needed — admin relays stream directly
+function requestStream(uid){
+  send({type:'obs-request-stream',roomName:ROOM,roomPassword:PASS,uid:uid,spectId:'booyah'});
+}
 
 function getLogo(name){
   if(!name) return null;
@@ -413,7 +227,6 @@ function getLogo(name){
   return null;
 }
 function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
-function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 </body>
 </html>
