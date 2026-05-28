@@ -33,6 +33,33 @@
   .cam-cell video{
     width:100%;height:100%;
     object-fit:cover;display:block;
+    position:absolute;inset:0;
+  }
+
+  /* ── Per-cell video position overrides ── */
+  /* Cell 1 — top left */
+  #cam-cell-0 video{
+    object-position: center center; /* change to e.g. "left top" or "60% 30%" */
+    transform: scale(1);            /* zoom: 1 = normal, 1.2 = 20% zoom */
+    transform-origin: center center;
+  }
+  /* Cell 2 — top right */
+  #cam-cell-1 video{
+    object-position: center center;
+    transform: scale(1);
+    transform-origin: center center;
+  }
+  /* Cell 3 — bottom left */
+  #cam-cell-2 video{
+    object-position: center center;
+    transform: scale(1);
+    transform-origin: center center;
+  }
+  /* Cell 4 — bottom right */
+  #cam-cell-3 video{
+    object-position: center center;
+    transform: scale(1);
+    transform-origin: center center;
   }
 
   .cam-cell .photo-fb{
@@ -180,13 +207,14 @@ async function showBooyah(teamName, teamLogoUrl, players){
   var slots = players.slice(0,4);
   while(slots.length < 4) slots.push({uid:'',playerName:'—'});
 
-  slots.forEach(function(player){
+  slots.forEach(function(player, cellIndex){
     var uid   = player ? String(player.uid || '') : '';
     var pname = player ? (player.playerName || player.nickname || uid || '—') : '—';
     var photo = uid ? (playerPhotos[uid] || null) : null;
 
     var cell = document.createElement('div');
     cell.className = 'cam-cell';
+    cell.id = 'cam-cell-' + cellIndex;
 
     var vid = document.createElement('video');
     vid.autoplay = true; vid.playsInline = true;
