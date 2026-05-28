@@ -5,15 +5,15 @@
 <title>Booyah Cam</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{width:1920px;height:1080px;overflow:hidden;background:#000;}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0d14;}
 
   #stage{
     position:relative;
     width:1920px;height:1080px;
-    background:#000;
+    background:#0a0d14;
   }
 
-  /* 2x2 grid fills entire stage */
+  /* ── Grid fills entire stage ── */
   .grid{
     position:absolute;
     inset:0;
@@ -23,16 +23,16 @@
     gap:0;
   }
 
+  /* ── Each cam cell ── */
   .cam-cell{
     position:relative;
     overflow:hidden;
-    background:#000;
+    background:#06090f;
   }
 
   .cam-cell video{
     width:100%;height:100%;
-    object-fit:cover;
-    display:block;
+    object-fit:cover;display:block;
   }
 
   .cam-cell .photo-fb{
@@ -44,18 +44,18 @@
   .cell-wait{
     position:absolute;inset:0;
     display:flex;align-items:center;justify-content:center;
-    background:#000;
+    background:#06090f;
   }
   .cell-wait-ring{
     width:40px;height:40px;
-    border:3px solid rgba(255,255,255,0.1);
-    border-top-color:rgba(255,255,255,0.4);
+    border:3px solid rgba(200,149,42,0.15);
+    border-top-color:#c8952a;
     border-radius:50%;
     animation:spin 1s linear infinite;
   }
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* Frame PNG sits on top of everything */
+  /* ── Frame PNG on top of everything ── */
   #frame-img{
     position:absolute;
     inset:0;
@@ -63,28 +63,14 @@
     pointer-events:none;
     z-index:100;
   }
-
-  /* Waiting state */
-  #waiting{
-    position:fixed;inset:0;
-    display:flex;align-items:center;justify-content:center;
-    background:#000;z-index:200;
-  }
-  .w-ring{
-    width:36px;height:36px;
-    border:2px solid rgba(255,255,255,0.15);
-    border-top-color:rgba(255,255,255,0.5);
-    border-radius:50%;
-    animation:spin 1s linear infinite;
-  }
 </style>
 </head>
 <body>
-
-<div id="waiting"><div class="w-ring"></div></div>
-
 <div id="stage">
+  <!-- 4 cam cells -->
   <div class="grid" id="cam-grid"></div>
+
+  <!-- Frame PNG sits on top -->
   <img id="frame-img" src="/frame.png" alt=""/>
 </div>
 
@@ -101,6 +87,7 @@ const peers = new Map();
 const playerPhotos = {};
 const teamLogos    = {};
 
+// Boot
 (async function(){
   try {
     const [p,l,t] = await Promise.all([
@@ -120,10 +107,14 @@ const teamLogos    = {};
 
 function connectWS(){
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+  ws.onopen  = () => {
+    console.log('[BOOYAH] WS connected, registering...');
+    send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+  };
   ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
+    console.log('[BOOYAH] WS msg:', msg.type, msg.uid||'');
     if(msg.type === 'booyah-detected'){
       booyahShown = true;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
@@ -136,45 +127,49 @@ function connectWS(){
       peers.clear();
       await showBooyah('', null, []);
     }
-    if(msg.type === 'relay-offer' || msg.type === 'offer'){
-      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId||'booyah');
+    if(msg.type === 'relay-offer'){
+      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId);
+    }
+    if(msg.type === 'offer'){
+      await handleRelayOffer(msg.uid, msg.sdp, 'booyah');
     }
     if(msg.type === 'relay-ice'){
       const conn = peers.get(msg.uid);
       if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
     }
-    if(msg.type === 'booyah-registered'){
-      // admin knows booyah cam is here
-    }
   };
 }
 
 async function showBooyah(teamName, teamLogoUrl, players){
-  document.getElementById('waiting').style.display = 'none';
-
   if(!players || !players.length){
     try{
-      var res = await fetch('/api/spect/booyah-players?room='+encodeURIComponent(ROOM)+'&pass='+encodeURIComponent(PASS));
+      var res = await fetch('/api/spect/booyah-players?room=test&pass=test');
       var data = await res.json();
-      if(data.players && data.players.length) players = data.players;
-    }catch(e){}
+      console.log('[BOOYAH] API players:', JSON.stringify(data));
+      if(data.players && data.players.length){
+        players = data.players;
+        if(!teamName && players[0] && players[0].team) teamName = players[0].team;
+      }
+    }catch(e){ console.error('[BOOYAH] API error:', e); }
     if(!players || !players.length){
       players = [
-        {uid:'',playerName:''},
-        {uid:'',playerName:''},
-        {uid:'',playerName:''},
-        {uid:'',playerName:''}
+        {uid:'',playerName:'SLOT 1'},
+        {uid:'',playerName:'SLOT 2'},
+        {uid:'',playerName:'SLOT 3'},
+        {uid:'',playerName:'SLOT 4'}
       ];
     }
   }
 
+  // Build 4 cells
   var grid = document.getElementById('cam-grid');
   grid.innerHTML = '';
   var slots = players.slice(0,4);
-  while(slots.length < 4) slots.push({uid:'',playerName:''});
+  while(slots.length < 4) slots.push({uid:'',playerName:'—'});
 
   slots.forEach(function(player){
     var uid   = player ? String(player.uid || '') : '';
+    var pname = player ? (player.playerName || player.nickname || uid || '—') : '—';
     var photo = uid ? (playerPhotos[uid] || null) : null;
 
     var cell = document.createElement('div');
@@ -192,22 +187,17 @@ async function showBooyah(teamName, teamLogoUrl, players){
       cell.appendChild(img);
     } else if(uid) {
       var w = document.createElement('div'); w.className='cell-wait';
-      if(uid) w.id='bcellwait-'+uid;
+      w.id='bcellwait-'+uid;
       var ring = document.createElement('div'); ring.className='cell-wait-ring';
       w.appendChild(ring); cell.appendChild(w);
     }
 
     grid.appendChild(cell);
-    if(uid) requestRelayStream(uid);
   });
 }
 
-function requestRelayStream(uid){
-  // stream will arrive via relay-offer from admin
-  send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'booyah', uid:uid});
-}
-
 async function handleRelayOffer(uid, sdp, viewerId){
+  console.log('[BOOYAH] handleRelayOffer uid:', uid, 'viewerId:', viewerId);
   if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
   var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
   var pc = new RTCPeerConnection({ iceServers: iceServers });
@@ -221,16 +211,23 @@ async function handleRelayOffer(uid, sdp, viewerId){
       if(ph) ph.style.display='none';
       var cw = document.getElementById('bcellwait-'+uid);
       if(cw) cw.style.display='none';
+      var ld = document.getElementById('bld-'+uid);
+      if(ld) ld.classList.add('on');
     }
-    console.log('[BOOYAH] Stream live uid:', uid);
+    console.log('[BOOYAH] Stream received for uid:', uid);
   };
 
   pc.onicecandidate = function(ev){
-    if(ev.candidate) send({
-      type:'relay-ice-back',
-      roomName:ROOM, roomPassword:PASS,
-      uid:uid, candidate:ev.candidate, viewerId:'booyah'
-    });
+    if(ev.candidate){
+      console.log('[BOOYAH] Sending relay-ice-back for uid:', uid, 'type:', ev.candidate.type);
+      send({
+        type:'relay-ice-back',
+        roomName:ROOM, roomPassword:PASS,
+        uid:uid, candidate:ev.candidate, viewerId: viewerId||'booyah'
+      });
+    } else {
+      console.log('[BOOYAH] ICE gathering complete for uid:', uid);
+    }
   };
 
   pc.onconnectionstatechange = function(){
@@ -246,11 +243,20 @@ async function handleRelayOffer(uid, sdp, viewerId){
   send({
     type:'relay-answer',
     roomName:ROOM, roomPassword:PASS,
-    uid:uid, sdp:pc.localDescription, viewerId:'booyah'
+    uid:uid, sdp:pc.localDescription, viewerId: viewerId||'booyah'
   });
+  console.log('[BOOYAH] Sent relay-answer for uid:', uid);
 }
 
+function getLogo(name){
+  if(!name) return null;
+  if(teamLogos[name]) return teamLogos[name];
+  var k=Object.keys(teamLogos), l=name.toLowerCase().trim();
+  for(var i=0;i<k.length;i++) if(k[i].toLowerCase().trim()===l) return teamLogos[k[i]];
+  return null;
+}
 function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 </body>
 </html>
