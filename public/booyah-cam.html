@@ -74,40 +74,29 @@
     position:absolute;inset:0;
   }
 
-  /* ── Per-cell individual position (top/bottom/left/right + scale) ── */
+  /* ── Per-cell individual position ── */
+  /* Uses object-position for shifting + scale for zoom — no layout loop */
   #cam-cell-0 video{
-    top: var(--c0-top) !important;
-    bottom: var(--c0-bottom) !important;
-    left: var(--c0-left) !important;
-    right: var(--c0-right) !important;
-    width: auto; height: auto;
+    object-position: calc(50% + var(--c0-left) - var(--c0-right))
+                     calc(50% + var(--c0-top)  - var(--c0-bottom));
     transform: scale(var(--c0-scale));
     transform-origin: center center;
   }
   #cam-cell-1 video{
-    top: var(--c1-top) !important;
-    bottom: var(--c1-bottom) !important;
-    left: var(--c1-left) !important;
-    right: var(--c1-right) !important;
-    width: auto; height: auto;
+    object-position: calc(50% + var(--c1-left) - var(--c1-right))
+                     calc(50% + var(--c1-top)  - var(--c1-bottom));
     transform: scale(var(--c1-scale));
     transform-origin: center center;
   }
   #cam-cell-2 video{
-    top: var(--c2-top) !important;
-    bottom: var(--c2-bottom) !important;
-    left: var(--c2-left) !important;
-    right: var(--c2-right) !important;
-    width: auto; height: auto;
+    object-position: calc(50% + var(--c2-left) - var(--c2-right))
+                     calc(50% + var(--c2-top)  - var(--c2-bottom));
     transform: scale(var(--c2-scale));
     transform-origin: center center;
   }
   #cam-cell-3 video{
-    top: var(--c3-top) !important;
-    bottom: var(--c3-bottom) !important;
-    left: var(--c3-left) !important;
-    right: var(--c3-right) !important;
-    width: auto; height: auto;
+    object-position: calc(50% + var(--c3-left) - var(--c3-right))
+                     calc(50% + var(--c3-top)  - var(--c3-bottom));
     transform: scale(var(--c3-scale));
     transform-origin: center center;
   }
