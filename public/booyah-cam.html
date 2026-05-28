@@ -14,12 +14,12 @@
     background:#0a0d14;
   }
 
-  /* ── Outer gold border ── */
-  #stage::before{
-    content:'';
+  /* ── Frame image overlay ── */
+  #frame-img{
     position:absolute;
-    inset:8px;
-    border:2px solid #c8952a;
+    inset:0;
+    width:100%;height:100%;
+    object-fit:fill;
     pointer-events:none;
     z-index:20;
   }
@@ -135,12 +135,7 @@
   }
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ── Corner brackets ── */
-  .cb{position:absolute;width:20px;height:20px;pointer-events:none;z-index:5;}
-  .cb.tl{top:5px;left:5px;border-top:2px solid #c8952a;border-left:2px solid #c8952a;}
-  .cb.tr{top:5px;right:5px;border-top:2px solid #c8952a;border-right:2px solid #c8952a;}
-  .cb.bl{bottom:30px;left:5px;border-bottom:2px solid #c8952a;border-left:2px solid #c8952a;}
-  .cb.br{bottom:30px;right:5px;border-bottom:2px solid #c8952a;border-right:2px solid #c8952a;}
+  /* Corner brackets removed — using frame.png */
 
   /* ── Name bar ── */
   .name-bar{
@@ -177,6 +172,9 @@
       <span class="banner-team" id="banner-name"></span>
     </div>
   </div>
+
+  <!-- Frame image overlay -->
+  <img id="frame-img" src="/frame.png" alt=""/>
 
   <!-- Divider lines -->
   <div class="div-h"></div>
@@ -337,10 +335,7 @@ async function showBooyah(teamName, teamLogoUrl, players){
       w.appendChild(ring); cell.appendChild(w);
     }
 
-    // Corner brackets
-    ['tl','tr','bl','br'].forEach(function(p2){
-      var cb = document.createElement('div'); cb.className='cb '+p2; cell.appendChild(cb);
-    });
+    // Corner brackets handled by frame.png
 
     // Name bar
     var bar = document.createElement('div'); bar.className='name-bar';
