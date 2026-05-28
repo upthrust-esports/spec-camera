@@ -6,11 +6,39 @@
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   :root{
+    /* ── Overall grid position ── */
     --grid-top:    5px;
     --grid-left:   75px;
     --grid-right:  6px;
     --grid-bottom: 28px;
     --grid-gap:    6px;
+
+    /* ── Cell 0 (top-left) ── */
+    --c0-top:    0px;
+    --c0-left:   0px;
+    --c0-scale:  1;
+
+    /* ── Cell 1 (top-right) ── */
+    --c1-top:    0px;
+    --c1-left:   0px;
+    --c1-scale:  1;
+
+    /* ── Cell 2 (bottom-left) ── */
+    --c2-top:    0px;
+    --c2-left:   0px;
+    --c2-scale:  1;
+
+    /* ── Cell 3 (bottom-right) ── */
+    --c3-top:    0px;
+    --c3-left:   0px;
+    --c3-scale:  1;
+
+    /* ── Name label positions ── */
+    /* positive bottom = up from bottom, negative = lower */
+    --n0-bottom: 32px;  --n0-left: 10px;  --n0-size: 22px;
+    --n1-bottom: 32px;  --n1-left: 10px;  --n1-size: 22px;
+    --n2-bottom: 32px;  --n2-left: 10px;  --n2-size: 22px;
+    --n3-bottom: 32px;  --n3-left: 10px;  --n3-size: 22px;
   }
   html,body{width:1920px;height:1080px;overflow:hidden;background:transparent;}
 
@@ -46,29 +74,21 @@
     position:absolute;inset:0;
   }
 
-  /* ── Per-cell video position overrides ── */
-  /* Cell 1 — top left */
+  /* ── Per-cell individual position ── */
   #cam-cell-0 video{
-    object-position: center center; /* change to e.g. "left top" or "60% 30%" */
-    transform: scale(1);            /* zoom: 1 = normal, 1.2 = 20% zoom */
+    transform: scale(var(--c0-scale)) translate(var(--c0-left), var(--c0-top));
     transform-origin: center center;
   }
-  /* Cell 2 — top right */
   #cam-cell-1 video{
-    object-position: center center;
-    transform: scale(1);
+    transform: scale(var(--c1-scale)) translate(var(--c1-left), var(--c1-top));
     transform-origin: center center;
   }
-  /* Cell 3 — bottom left */
   #cam-cell-2 video{
-    object-position: center center;
-    transform: scale(1);
+    transform: scale(var(--c2-scale)) translate(var(--c2-left), var(--c2-top));
     transform-origin: center center;
   }
-  /* Cell 4 — bottom right */
   #cam-cell-3 video{
-    object-position: center center;
-    transform: scale(1);
+    transform: scale(var(--c3-scale)) translate(var(--c3-left), var(--c3-top));
     transform-origin: center center;
   }
 
@@ -91,6 +111,32 @@
     animation:spin 1s linear infinite;
   }
   @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── GFF Latin Bold font ── */
+  @font-face {
+    font-family: 'GFF Latin';
+    src: url('/fonts/GFFLatin-Bold.ttf') format('truetype'),
+         url('/fonts/GFFLatin-Bold.woff2') format('woff2');
+    font-weight: 700;
+  }
+
+  /* ── Player name labels ── */
+  .name-label {
+    position: absolute;
+    z-index: 10;
+    font-family: 'GFF Latin', 'Rajdhani', sans-serif;
+    font-weight: 700;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    pointer-events: none;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7);
+  }
+  #name-0 { bottom: var(--n0-bottom); left: var(--n0-left); font-size: var(--n0-size); }
+  #name-1 { bottom: var(--n1-bottom); left: var(--n1-left); font-size: var(--n1-size); }
+  #name-2 { bottom: var(--n2-bottom); left: var(--n2-left); font-size: var(--n2-size); }
+  #name-3 { bottom: var(--n3-bottom); left: var(--n3-left); font-size: var(--n3-size); }
 
   /* ── Frame PNG on top of everything ── */
   #frame-img{
@@ -242,6 +288,13 @@ async function showBooyah(teamName, teamLogoUrl, players){
       var ring = document.createElement('div'); ring.className='cell-wait-ring';
       w.appendChild(ring); cell.appendChild(w);
     }
+
+    // Name label
+    var nameEl = document.createElement('div');
+    nameEl.className = 'name-label';
+    nameEl.id = 'name-' + cellIndex;
+    nameEl.textContent = pname !== '—' ? pname : '';
+    cell.appendChild(nameEl);
 
     grid.appendChild(cell);
 
