@@ -5,6 +5,13 @@
 <title>Booyah Cam</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --grid-top:    50px;
+    --grid-left:   50px;
+    --grid-right:  50px;
+    --grid-bottom: 50px;
+    --grid-gap:    6px;
+  }
   html,body{width:1920px;height:1080px;overflow:hidden;background:transparent;}
 
   #stage{
@@ -16,14 +23,14 @@
   /* ── Grid fills entire stage ── */
   .grid{
     position:absolute;
-    top:18px;
-    left:18px;
-    right:18px;
-    bottom:18px;
+    top:var(--grid-top);
+    left:var(--grid-left);
+    right:var(--grid-right);
+    bottom:var(--grid-bottom);
     display:grid;
     grid-template-columns:1fr 1fr;
     grid-template-rows:1fr 1fr;
-    gap:4px;
+    gap:var(--grid-gap);
   }
 
   /* ── Each cam cell ── */
