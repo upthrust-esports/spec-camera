@@ -10,15 +10,17 @@
   #stage{
     position:relative;
     width:1920px;height:1080px;
+    background:#000;
   }
 
-  /* 2x2 camera grid — fills entire stage */
+  /* 2x2 grid fills entire stage */
   .grid{
     position:absolute;
     inset:0;
     display:grid;
     grid-template-columns:1fr 1fr;
     grid-template-rows:1fr 1fr;
+    gap:0;
   }
 
   .cam-cell{
@@ -29,7 +31,8 @@
 
   .cam-cell video{
     width:100%;height:100%;
-    object-fit:cover;display:block;
+    object-fit:cover;
+    display:block;
   }
 
   .cam-cell .photo-fb{
@@ -45,38 +48,42 @@
   }
   .cell-wait-ring{
     width:40px;height:40px;
-    border:2px solid rgba(255,255,255,0.1);
+    border:3px solid rgba(255,255,255,0.1);
     border-top-color:rgba(255,255,255,0.4);
     border-radius:50%;
     animation:spin 1s linear infinite;
   }
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* Frame PNG on top of everything */
+  /* Frame PNG sits on top of everything */
   #frame-img{
     position:absolute;
     inset:0;
     width:1920px;height:1080px;
-    object-fit:fill;
     pointer-events:none;
-    z-index:50;
+    z-index:100;
   }
 
   /* Waiting state */
   #waiting{
     position:fixed;inset:0;
-    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;
-    background:#000;z-index:100;
+    display:flex;align-items:center;justify-content:center;
+    background:#000;z-index:200;
+  }
+  .w-ring{
+    width:36px;height:36px;
+    border:2px solid rgba(255,255,255,0.15);
+    border-top-color:rgba(255,255,255,0.5);
+    border-radius:50%;
+    animation:spin 1s linear infinite;
   }
 </style>
 </head>
 <body>
 
-<div id="waiting">
-  <div class="cell-wait-ring"></div>
-</div>
+<div id="waiting"><div class="w-ring"></div></div>
 
-<div id="stage" style="display:none;">
+<div id="stage">
   <div class="grid" id="cam-grid"></div>
   <img id="frame-img" src="/frame.png" alt=""/>
 </div>
@@ -117,47 +124,34 @@ function connectWS(){
   ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
-
-    if(msg.type === 'booyah-registered'){
-      console.log('[BOOYAH] Registered — admin will relay streams');
-    }
-
     if(msg.type === 'booyah-detected'){
       booyahShown = true;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
       peers.clear();
       await showBooyah(msg.teamName, msg.teamLogo, msg.players);
     }
-
     if(msg.type === 'booyah-reset'){
       booyahShown = false;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
       peers.clear();
       await showBooyah('', null, []);
     }
-
-    // relay-offer from admin — admin forwards player stream to us
     if(msg.type === 'relay-offer' || msg.type === 'offer'){
-      console.log('[BOOYAH] relay-offer for uid:', msg.uid);
-      await handleRelayOffer(msg.uid, msg.sdp);
+      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId||'booyah');
     }
-
-    // relay-ice from admin
     if(msg.type === 'relay-ice'){
       const conn = peers.get(msg.uid);
       if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
     }
-
-    // answer (fallback)
-    if(msg.type === 'answer'){
-      const conn = peers.get(msg.uid);
-      if(conn && conn.pc && conn.pc.signalingState !== 'stable')
-        await conn.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+    if(msg.type === 'booyah-registered'){
+      // admin knows booyah cam is here
     }
   };
 }
 
 async function showBooyah(teamName, teamLogoUrl, players){
+  document.getElementById('waiting').style.display = 'none';
+
   if(!players || !players.length){
     try{
       var res = await fetch('/api/spect/booyah-players?room='+encodeURIComponent(ROOM)+'&pass='+encodeURIComponent(PASS));
@@ -165,12 +159,14 @@ async function showBooyah(teamName, teamLogoUrl, players){
       if(data.players && data.players.length) players = data.players;
     }catch(e){}
     if(!players || !players.length){
-      players = [{uid:'',playerName:''},{uid:'',playerName:''},{uid:'',playerName:''},{uid:'',playerName:''}];
+      players = [
+        {uid:'',playerName:''},
+        {uid:'',playerName:''},
+        {uid:'',playerName:''},
+        {uid:'',playerName:''}
+      ];
     }
   }
-
-  document.getElementById('waiting').style.display = 'none';
-  document.getElementById('stage').style.display   = 'block';
 
   var grid = document.getElementById('cam-grid');
   grid.innerHTML = '';
@@ -202,13 +198,19 @@ async function showBooyah(teamName, teamLogoUrl, players){
     }
 
     grid.appendChild(cell);
+    if(uid) requestRelayStream(uid);
   });
 }
 
-async function handleRelayOffer(uid, sdp){
+function requestRelayStream(uid){
+  // stream will arrive via relay-offer from admin
+  send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'booyah', uid:uid});
+}
+
+async function handleRelayOffer(uid, sdp, viewerId){
   if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
   var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
-  var pc = new RTCPeerConnection({ iceServers });
+  var pc = new RTCPeerConnection({ iceServers: iceServers });
   peers.set(uid, {pc});
 
   pc.ontrack = function(ev){
@@ -220,27 +222,34 @@ async function handleRelayOffer(uid, sdp){
       var cw = document.getElementById('bcellwait-'+uid);
       if(cw) cw.style.display='none';
     }
+    console.log('[BOOYAH] Stream live uid:', uid);
   };
 
   pc.onicecandidate = function(ev){
-    if(ev.candidate) send({type:'relay-ice-back',roomName:ROOM,roomPassword:PASS,uid:uid,candidate:ev.candidate,viewerId:'booyah'});
+    if(ev.candidate) send({
+      type:'relay-ice-back',
+      roomName:ROOM, roomPassword:PASS,
+      uid:uid, candidate:ev.candidate, viewerId:'booyah'
+    });
+  };
+
+  pc.onconnectionstatechange = function(){
+    console.log('[BOOYAH PC '+uid+']', pc.connectionState);
+    if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
+      peers.delete(uid);
+    }
   };
 
   await pc.setRemoteDescription(new RTCSessionDescription(sdp));
   var answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
-  send({type:'relay-answer',roomName:ROOM,roomPassword:PASS,uid:uid,sdp:pc.localDescription,viewerId:'booyah'});
+  send({
+    type:'relay-answer',
+    roomName:ROOM, roomPassword:PASS,
+    uid:uid, sdp:pc.localDescription, viewerId:'booyah'
+  });
 }
 
-// No requestStream needed — admin relays stream via relay-offer on booyah-registered
-
-function getLogo(name){
-  if(!name) return null;
-  if(teamLogos[name]) return teamLogos[name];
-  var k=Object.keys(teamLogos), l=name.toLowerCase().trim();
-  for(var i=0;i<k.length;i++) if(k[i].toLowerCase().trim()===l) return teamLogos[k[i]];
-  return null;
-}
 function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
 </script>
 </body>
