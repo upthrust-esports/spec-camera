@@ -117,24 +117,42 @@ function connectWS(){
   ws.onclose = () => setTimeout(connectWS, 2000);
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
+
+    if(msg.type === 'booyah-registered'){
+      console.log('[BOOYAH] Registered — admin will relay streams');
+    }
+
     if(msg.type === 'booyah-detected'){
       booyahShown = true;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
       peers.clear();
       await showBooyah(msg.teamName, msg.teamLogo, msg.players);
     }
+
     if(msg.type === 'booyah-reset'){
       booyahShown = false;
       peers.forEach(function(conn){ if(conn && conn.pc) conn.pc.close(); });
       peers.clear();
       await showBooyah('', null, []);
     }
+
+    // relay-offer from admin — admin forwards player stream to us
     if(msg.type === 'relay-offer' || msg.type === 'offer'){
+      console.log('[BOOYAH] relay-offer for uid:', msg.uid);
       await handleRelayOffer(msg.uid, msg.sdp);
     }
+
+    // relay-ice from admin
     if(msg.type === 'relay-ice'){
       const conn = peers.get(msg.uid);
       if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
+    }
+
+    // answer (fallback)
+    if(msg.type === 'answer'){
+      const conn = peers.get(msg.uid);
+      if(conn && conn.pc && conn.pc.signalingState !== 'stable')
+        await conn.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
     }
   };
 }
@@ -184,7 +202,6 @@ async function showBooyah(teamName, teamLogoUrl, players){
     }
 
     grid.appendChild(cell);
-    if(uid) requestStream(uid);
   });
 }
 
@@ -215,9 +232,7 @@ async function handleRelayOffer(uid, sdp){
   send({type:'relay-answer',roomName:ROOM,roomPassword:PASS,uid:uid,sdp:pc.localDescription,viewerId:'booyah'});
 }
 
-function requestStream(uid){
-  send({type:'obs-request-stream',roomName:ROOM,roomPassword:PASS,uid:uid,spectId:'booyah'});
-}
+// No requestStream needed — admin relays stream via relay-offer on booyah-registered
 
 function getLogo(name){
   if(!name) return null;
