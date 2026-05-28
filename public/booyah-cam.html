@@ -14,32 +14,24 @@
     --grid-gap:    6px;
 
     /* ── Cell 0 (top-left) ── */
-    --c0-top:    0px;
-    --c0-left:   0px;
+    --c0-top:    0px;  --c0-bottom: 0px;
+    --c0-left:   0px;  --c0-right:  0px;
     --c0-scale:  1;
-    --c0-right:  0px;
-    --c0-bottom: 0px;
 
     /* ── Cell 1 (top-right) ── */
-    --c1-top:    0px;
-    --c1-left:   0px;
+    --c1-top:    0px;  --c1-bottom: 0px;
+    --c1-left:   0px;  --c1-right:  0px;
     --c1-scale:  1;
-    --c1-right:  0px;
-    --c1-bottom: 0px;
 
     /* ── Cell 2 (bottom-left) ── */
-    --c2-top:    0px;
-    --c2-left:   0px;
+    --c2-top:    0px;  --c2-bottom: 0px;
+    --c2-left:   0px;  --c2-right:  0px;
     --c2-scale:  1;
-    --c2-right:  0px;
-    --c2-bottom: 0px;
 
     /* ── Cell 3 (bottom-right) ── */
-    --c3-top:    0px;
-    --c3-left:   0px;
+    --c3-top:    0px;  --c3-bottom: 0px;
+    --c3-left:   0px;  --c3-right:  0px;
     --c3-scale:  1;
-    --c3-right:  0px;
-    --c3-bottom: 0px;
 
     /* ── Name label positions ── */
     /* positive bottom = up from bottom, negative = lower */
@@ -82,21 +74,41 @@
     position:absolute;inset:0;
   }
 
-  /* ── Per-cell individual position ── */
+  /* ── Per-cell individual position (top/bottom/left/right + scale) ── */
   #cam-cell-0 video{
-    transform: scale(var(--c0-scale)) translate(var(--c0-left), var(--c0-top));
+    top: var(--c0-top) !important;
+    bottom: var(--c0-bottom) !important;
+    left: var(--c0-left) !important;
+    right: var(--c0-right) !important;
+    width: auto; height: auto;
+    transform: scale(var(--c0-scale));
     transform-origin: center center;
   }
   #cam-cell-1 video{
-    transform: scale(var(--c1-scale)) translate(var(--c1-left), var(--c1-top));
+    top: var(--c1-top) !important;
+    bottom: var(--c1-bottom) !important;
+    left: var(--c1-left) !important;
+    right: var(--c1-right) !important;
+    width: auto; height: auto;
+    transform: scale(var(--c1-scale));
     transform-origin: center center;
   }
   #cam-cell-2 video{
-    transform: scale(var(--c2-scale)) translate(var(--c2-left), var(--c2-top));
+    top: var(--c2-top) !important;
+    bottom: var(--c2-bottom) !important;
+    left: var(--c2-left) !important;
+    right: var(--c2-right) !important;
+    width: auto; height: auto;
+    transform: scale(var(--c2-scale));
     transform-origin: center center;
   }
   #cam-cell-3 video{
-    transform: scale(var(--c3-scale)) translate(var(--c3-left), var(--c3-top));
+    top: var(--c3-top) !important;
+    bottom: var(--c3-bottom) !important;
+    left: var(--c3-left) !important;
+    right: var(--c3-right) !important;
+    width: auto; height: auto;
+    transform: scale(var(--c3-scale));
     transform-origin: center center;
   }
 
