@@ -24,7 +24,7 @@
     border:1px solid rgba(200,149,42,0.3);
   }
 
-  /* video on top */
+  /* video on top — hidden until live */
   .cam-cell video{
     position:absolute;inset:0;
     width:100%;height:100%;
@@ -33,7 +33,7 @@
     opacity:0;
     transition:opacity .5s;
   }
-  .cam-cell.live video{ opacity:1; }
+  .cam-cell.live video{ opacity:1 !important; }
 
   /* default / player photo always visible behind video */
   .cam-cell .photo-fb{
@@ -150,7 +150,7 @@ function buildGrid(){
 
     var cell = document.createElement('div');
     cell.className = 'cam-cell';
-    cell.id = 'cell-' + (uid || 'slot'+i);
+    cell.id = uid ? 'cell-'+uid : 'cell-slot'+i;
 
     // Slot number
     var sn = document.createElement('div');
@@ -161,7 +161,7 @@ function buildGrid(){
     // Default/player photo (always behind)
     var fb = document.createElement('img');
     fb.className = 'photo-fb';
-    fb.id = 'photo-' + (uid || 'slot'+i);
+    fb.id = uid ? 'photo-'+uid : 'photo-slot'+i;
     fb.src = photo || defImg;
     fb.onerror = function(){ this.onerror=null; this.style.display='none'; };
     cell.appendChild(fb);
@@ -169,7 +169,7 @@ function buildGrid(){
     // Video (hidden until live)
     var vid = document.createElement('video');
     vid.autoplay=true; vid.playsInline=true; vid.muted=true;
-    vid.id = 'vid-' + uid;
+    if(uid) vid.id = 'vid-' + uid;
     cell.appendChild(vid);
 
     // Team logo
@@ -256,10 +256,15 @@ async function handleRelayOffer(uid, sdp, viewerId){
   pc.ontrack = function(ev){
     var vid  = document.getElementById('vid-'+uid);
     var cell = document.getElementById('cell-'+uid);
+    console.log('[CAMWALL] ontrack uid:', uid, 'vid:', !!vid, 'cell:', !!cell, 'streams:', ev.streams.length);
     if(vid && ev.streams[0]){
       vid.srcObject = ev.streams[0];
+      vid.style.opacity = '1';
+      vid.style.zIndex  = '3';
       if(cell) cell.classList.add('live');
-      console.log('[CAMWALL] Live:', uid);
+      var ph = document.getElementById('photo-'+uid);
+      if(ph){ ph.style.opacity='0'; ph.style.transition='opacity .5s'; }
+      console.log('[CAMWALL] Stream set for uid:', uid);
     }
   };
 
