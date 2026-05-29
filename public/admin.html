@@ -753,9 +753,12 @@ function connectWS() {
 
     // Booyah cam just connected — relay all existing streams to it
     if(msg.type==='booyah-registered'){
-      console.log('[RELAY] Booyah cam registered, forwarding', peerConns.size, 'streams');
+      console.log('[RELAY] Booyah/camwall registered, forwarding', peerConns.size, 'streams to all');
       peerConns.forEach(function(conn, uid){
-        if(conn && conn.stream) relayToViewer(uid, conn.stream, 'booyah');
+        if(conn && conn.stream){
+          relayToViewer(uid, conn.stream, 'booyah');
+          relayToViewer(uid, conn.stream, 'camwall');
+        }
       });
     }
 
@@ -763,21 +766,22 @@ function connectWS() {
     if(msg.type==='spect-viewer-registered'){
       var rawId   = msg.spectId || '';
       // Handle booyah cam separately
-      if(rawId === 'booyah'){
+      if(rawId === 'booyah' || rawId === 'camwall'){
+        var viewerIdRaw = rawId;
         var uid = msg.uid;
-        console.log('[RELAY] Booyah cam requesting uid:', uid);
+        console.log('[RELAY]', viewerIdRaw, 'requesting uid:', uid);
         if(uid){
           var conn = peerConns.get(uid);
           if(conn && conn.stream){
-            relayToViewer(uid, conn.stream, 'booyah');
+            relayToViewer(uid, conn.stream, viewerIdRaw);
           }
         } else {
-          // No specific uid — relay all current streams to booyah
+          // Relay ALL current streams to this viewer
           peerConns.forEach(function(conn2, uid2){
-            if(conn2 && conn2.stream) relayToViewer(uid2, conn2.stream, 'booyah');
+            if(conn2 && conn2.stream) relayToViewer(uid2, conn2.stream, viewerIdRaw);
           });
         }
-        return;  // skip spect slot logic
+        return;
       }
       var slotNum  = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
       var spectId  = 'SPECT' + slotNum;
@@ -839,9 +843,9 @@ const relayPCs = new Map();
 
 async function forwardStreamToViewers(uid, stream) {
   setTimeout(async function(){
-    // Forward to booyah cam
+    // Relay to ALL viewers simultaneously — booyah + camwall + all spect slots
     await relayToViewer(uid, stream, 'booyah');
-    // Forward to any spect slots currently watching this uid
+    await relayToViewer(uid, stream, 'camwall');
     if (spectSlots && spectSlots.length) {
       spectSlots.forEach(async function(slot) {
         if (slot.uid === uid) {
@@ -849,6 +853,7 @@ async function forwardStreamToViewers(uid, stream) {
         }
       });
     }
+    console.log('[RELAY] Forwarded uid:', uid, 'to booyah + camwall + spects');
   }, 500);
 }
 
@@ -865,10 +870,11 @@ async function relayToViewer(uid, stream, viewerId) {
   const rpc = new RTCPeerConnection({ iceServers });
 
   if (!relayPCs.has(uid)) relayPCs.set(uid, {});
+  // Only close THIS viewer's old relay — keep all other viewers' relays alive
   const oldRpc = relayPCs.get(uid)[viewerId];
-  if (oldRpc) try { oldRpc.close(); } catch {}
+  if (oldRpc) { try { oldRpc.close(); } catch {} }
   relayPCs.get(uid)[viewerId] = rpc;
-  console.log('[RELAY] Stored relay PC uid:', uid, 'viewerId:', viewerId, 'keys:', Object.keys(relayPCs.get(uid)));
+  console.log('[RELAY] Relay uid:', uid, 'viewer:', viewerId, '| all viewers:', Object.keys(relayPCs.get(uid)));
 
   // ICE candidate queue — store candidates that arrive before remote description is set
   rpc._iceQueue = [];
@@ -950,10 +956,12 @@ async function handleRelayIce(uid, viewerId, candidate) {
 
 // When player disconnects, close relay PCs
 function cleanupRelayPCs(uid) {
+  // Called when player disconnects — close all relays for this player
   const rpcMap = relayPCs.get(uid);
   if (rpcMap) {
-    Object.values(rpcMap).forEach(rpc => { try { rpc.close(); } catch {} });
+    Object.values(rpcMap).forEach(function(rpc){ try { rpc.close(); } catch {} });
     relayPCs.delete(uid);
+    console.log('[RELAY] Cleaned all relays for uid:', uid);
   }
 }
 
