@@ -40,6 +40,8 @@ const wss = new WebSocketServer({ server });
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+// Serve default player images from public/image/
+app.use('/image', express.static(path.join(__dirname, 'public', 'image')));
 
 // ─── In-memory store ──────────────────────────────────────────────────────────
 const rooms         = new Map();
@@ -475,11 +477,10 @@ wss.on('connection', (ws) => {
     // obs-ready: spect viewer is ready, tell admin to relay the stream
     if (msg.type === 'obs-ready') {
       const rawId = String(msg.spectId || '');
-      if (rawId === 'booyah') {
-        // Booyah cam requesting stream — tell admin to relay
+      if (rawId === 'booyah' || rawId === 'camwall') {
+        // Booyah/camwall requesting stream — tell admin to relay
         broadcastAdmins(key, { type:'booyah-registered' });
-        // Also tell admin to relay this specific uid to booyah
-        broadcastAdmins(key, { type:'spect-viewer-registered', spectId:'booyah', uid: msg.uid });
+        broadcastAdmins(key, { type:'spect-viewer-registered', spectId: rawId, uid: msg.uid });
       } else {
         // Normalize spect slot to SPECT{n} format
         const slotNum = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
@@ -544,7 +545,7 @@ wss.on('connection', (ws) => {
       if (!room || room.adminToken !== msg.adminToken) return;
       const viewerId = msg.viewerId || 'booyah';
       let targetWs = null;
-      if (viewerId === 'booyah') {
+      if (viewerId === 'booyah' || viewerId === 'camwall') {
         getPeers(key).forEach((pws, id) => { if (id.startsWith('booyah:')) targetWs = pws; });
       } else {
         // viewerId may be 'SPECT1' or '1' — obs peers are stored as 'obs:1'
@@ -573,7 +574,7 @@ wss.on('connection', (ws) => {
       if (!room || room.adminToken !== msg.adminToken) return;
       const viewerId = msg.viewerId || 'booyah';
       let targetWs = null;
-      if (viewerId === 'booyah') {
+      if (viewerId === 'booyah' || viewerId === 'camwall') {
         getPeers(key).forEach((pws, id) => { if (id.startsWith('booyah:')) targetWs = pws; });
       } else {
         // viewerId may be 'SPECT1' or '1' — obs peers are stored as 'obs:1'

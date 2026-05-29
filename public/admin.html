@@ -598,7 +598,8 @@ function getPlayerPhoto(uid, playerName) {
       if(keys[i].toLowerCase().trim() === lower) return playerPhotos[keys[i]];
     }
   }
-  return null;
+  // Default fallback images from /image/ folder
+  return '/image/1.png';
 }
 
 // Load logos from server public/logos/ folder (filename = team name)

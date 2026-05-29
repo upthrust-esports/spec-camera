@@ -8,23 +8,23 @@
   :root{
     /* ── Overall grid position ── */
     --grid-top:    5px;
-    --grid-left:   56px;
-    --grid-right:  7px;
-    --grid-bottom: 6px;
-    --grid-gap:    26px;
+    --grid-left:   75px;
+    --grid-right:  6px;
+    --grid-bottom: 28px;
+    --grid-gap:    6px;
 
     /* ── Cell 0 (top-left) ── */
-    --c0-top:    -8px;  --c0-bottom: -7px;
-    --c0-left:   -23px;  --c0-right:  -18px;
+    --c0-top:    0px;  --c0-bottom: 0px;
+    --c0-left:   0px;  --c0-right:  0px;
     --c0-scale:  1;
 
     /* ── Cell 1 (top-right) ── */
     --c1-top:    0px;  --c1-bottom: 0px;
-    --c1-left:   1px;  --c1-right:  7px;
+    --c1-left:   0px;  --c1-right:  0px;
     --c1-scale:  1;
 
     /* ── Cell 2 (bottom-left) ── */
-    --c2-top:    -1px;  --c2-bottom: 0px;
+    --c2-top:    0px;  --c2-bottom: 0px;
     --c2-left:   0px;  --c2-right:  0px;
     --c2-scale:  1;
 
@@ -35,10 +35,10 @@
 
     /* ── Name label positions ── */
     /* positive bottom = up from bottom, negative = lower */
-    --n0-bottom: 44px;  --n0-left: 33px;  --n0-size: 22px;
-    --n1-bottom: 44px;  --n1-left: 33px;  --n1-size: 22px;
-    --n2-bottom: 44px;  --n2-left: 33px;  --n2-size: 22px;
-    --n3-bottom: 44px;  --n3-left: 33px;  --n3-size: 22px;
+    --n0-bottom: 32px;  --n0-left: 10px;  --n0-size: 22px;
+    --n1-bottom: 32px;  --n1-left: 10px;  --n1-size: 22px;
+    --n2-bottom: 32px;  --n2-left: 10px;  --n2-size: 22px;
+    --n3-bottom: 32px;  --n3-left: 10px;  --n3-size: 22px;
   }
   html,body{width:1920px;height:1080px;overflow:hidden;background:transparent;}
 
@@ -286,17 +286,14 @@ async function showBooyah(teamName, teamLogoUrl, players){
     if(uid) vid.id = 'bvid-'+uid;
     cell.appendChild(vid);
 
-    if(photo){
-      var img = document.createElement('img');
-      img.src = photo; img.className = 'photo-fb';
-      if(uid) img.id = 'bphoto-'+uid;
-      cell.appendChild(img);
-    } else if(uid) {
-      var w = document.createElement('div'); w.className='cell-wait';
-      w.id='bcellwait-'+uid;
-      var ring = document.createElement('div'); ring.className='cell-wait-ring';
-      w.appendChild(ring); cell.appendChild(w);
-    }
+    // Photo fallback — player photo or default 1/2/3/4.png per cell
+    var fallbackSrc = photo || ('/image/' + (cellIndex + 1) + '.png');
+    var fbImg = document.createElement('img');
+    fbImg.src = fallbackSrc;
+    fbImg.className = 'photo-fb';
+    fbImg.id = 'bphoto-' + uid;
+    fbImg.onerror = function(){ this.style.display='none'; };
+    cell.appendChild(fbImg);
 
     // Name label
     var nameEl = document.createElement('div');
@@ -326,7 +323,7 @@ async function handleRelayOffer(uid, sdp, viewerId){
     if(vid){
       vid.srcObject = ev.streams[0];
       var ph = document.getElementById('bphoto-'+uid);
-      if(ph) ph.style.display='none';
+      if(ph){ ph.style.opacity='0'; ph.style.transition='opacity .5s'; }
       var cw = document.getElementById('bcellwait-'+uid);
       if(cw) cw.style.display='none';
       var ld = document.getElementById('bld-'+uid);

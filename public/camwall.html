@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Cam Wall</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{
+    width:1920px;height:1080px;
+    overflow:hidden;
+    background:#0a0d14;
+  }
+
+  /* ── Root config — edit to adjust layout ── */
+  :root{
+    --cols: 6;           /* cameras per row */
+    --gap:  3px;         /* gap between cells */
+    --border-color: #c8952a;
+    --border-width: 1px;
+    --name-size: 13px;
+    --name-bottom: 2px;
+    --name-left: 6px;
+    --logo-size: 48px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(var(--cols), 1fr);
+    gap: var(--gap);
+    width:1920px;
+    height:1080px;
+    background:#000;
+  }
+
+  /* ── Each cam cell ── */
+  .cam-cell{
+    position:relative;
+    overflow:hidden;
+    background:#06090f;
+    border:var(--border-width) solid var(--border-color);
+  }
+
+  .cam-cell video{
+    width:100%;height:100%;
+    object-fit:cover;
+    display:block;
+    position:absolute;inset:0;
+  }
+
+  /* Photo fallback */
+  .cam-cell .photo-fb{
+    position:absolute;inset:0;
+    width:100%;height:100%;
+    object-fit:cover;display:block;
+  }
+
+  /* Waiting spinner */
+  .cell-wait{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    background:#06090f;
+  }
+  .cell-wait-ring{
+    width:22px;height:22px;
+    border:2px solid rgba(200,149,42,0.15);
+    border-top-color:#c8952a;
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── Team logo in center ── */
+  .team-logo{
+    position:absolute;
+    top:50%;left:50%;
+    transform:translate(-50%,-60%);
+    width:var(--logo-size);height:var(--logo-size);
+    object-fit:contain;
+    opacity:0.35;
+    pointer-events:none;
+    z-index:5;
+    transition:opacity .3s;
+  }
+  /* hide logo when video is live */
+  .cam-cell.live .team-logo{ opacity:0; }
+
+  /* ── Player name bar ── */
+  .name-bar{
+    position:absolute;
+    bottom:var(--name-bottom);
+    left:var(--name-left);
+    right:0;
+    z-index:10;
+    font-family:'Rajdhani','Arial Narrow',sans-serif;
+    font-size:var(--name-size);
+    font-weight:700;
+    color:#fff;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    text-shadow:0 1px 4px rgba(0,0,0,0.9);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  /* ── Live indicator dot ── */
+  .live-dot{
+    position:absolute;
+    top:4px;right:4px;
+    width:6px;height:6px;
+    border-radius:50%;
+    background:#00ff88;
+    opacity:0;
+    z-index:10;
+    transition:opacity .3s;
+    box-shadow:0 0 6px #00ff88;
+  }
+  .cam-cell.live .live-dot{ opacity:1; animation:ldp 1.5s infinite; }
+  @keyframes ldp{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Corner accents ── */
+  .ca{position:absolute;width:8px;height:8px;pointer-events:none;z-index:6;}
+  .ca.tl{top:2px;left:2px;border-top:1px solid var(--border-color);border-left:1px solid var(--border-color);}
+  .ca.tr{top:2px;right:2px;border-top:1px solid var(--border-color);border-right:1px solid var(--border-color);}
+  .ca.bl{bottom:2px;left:2px;border-bottom:1px solid var(--border-color);border-left:1px solid var(--border-color);}
+  .ca.br{bottom:2px;right:2px;border-bottom:1px solid var(--border-color);border-right:1px solid var(--border-color);}
+</style>
+</head>
+<body>
+<div class="grid" id="cam-grid"></div>
+
+<script>
+const API    = location.origin;
+const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
+const ROOM   = 'test';
+const PASS   = 'test';
+
+let ws = null;
+const peers        = new Map();
+const playerPhotos = {};
+const teamLogos    = {};
+let cameras        = [];
+
+// Boot
+(async function(){
+  try {
+    const [p,l,t,cam] = await Promise.all([
+      fetch('/api/players/photos'),
+      fetch('/api/logos'),
+      fetch('/api/turn-config'),
+      fetch('/api/spect/booyah-players?room='+ROOM+'&pass='+PASS)
+    ]);
+    const pd=await p.json(); const ld=await l.json();
+    const td=await t.json(); const cd=await cam.json();
+    if(pd.photos) Object.assign(playerPhotos, pd.photos);
+    if(ld.logos)  Object.assign(teamLogos,    ld.logos);
+    if(td.iceServers) window.ICE_SERVERS = td.iceServers;
+    cameras = cd.players || [];
+  } catch(e){ console.warn('Boot:', e); }
+
+  buildGrid();
+  connectWS();
+})();
+
+function buildGrid(){
+  var grid = document.getElementById('cam-grid');
+  grid.innerHTML = '';
+
+  // Auto-adjust columns based on camera count
+  var total = cameras.length || 1;
+  var cols  = Math.ceil(Math.sqrt(total * (16/9)));
+  cols      = Math.max(cols, 1);
+  document.documentElement.style.setProperty('--cols', cols);
+
+  cameras.forEach(function(player, idx){
+    var uid   = String(player.uid || '');
+    var pname = player.playerName || uid;
+    var team  = player.team || '';
+    var photo = uid ? (playerPhotos[uid] || null) : null;
+    var logo  = team ? getTeamLogo(team) : null;
+
+    var cell = document.createElement('div');
+    cell.className = 'cam-cell';
+    cell.id = 'cell-'+uid;
+
+    // Video
+    var vid = document.createElement('video');
+    vid.autoplay=true; vid.playsInline=true; vid.muted=true;
+    vid.id = 'vid-'+uid;
+    cell.appendChild(vid);
+
+    // Photo fallback — player photo or default 1-4.png cycling
+    var fallback = photo || ('/image/' + ((idx % 4) + 1) + '.png');
+    var img = document.createElement('img');
+    img.src=fallback; img.className='photo-fb'; img.id='photo-'+uid;
+    img.onerror = function(){ this.style.display='none'; };
+    cell.appendChild(img);
+
+    // Team logo in center
+    if(logo){
+      var limg = document.createElement('img');
+      limg.src=logo; limg.className='team-logo'; limg.id='logo-'+uid;
+      cell.appendChild(limg);
+    }
+
+    // Corner accents
+    ['tl','tr','bl','br'].forEach(function(pos){
+      var ca=document.createElement('div'); ca.className='ca '+pos; cell.appendChild(ca);
+    });
+
+    // Live dot
+    var dot = document.createElement('div'); dot.className='live-dot'; cell.appendChild(dot);
+
+    // Name bar
+    var bar = document.createElement('div'); bar.className='name-bar';
+    bar.textContent = pname;
+    cell.appendChild(bar);
+
+    grid.appendChild(cell);
+
+    // Request stream
+    if(uid) send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'camwall', uid:uid});
+  });
+}
+
+function connectWS(){
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+  };
+  ws.onclose = () => setTimeout(connectWS, 2000);
+  ws.onmessage = async (e) => {
+    const msg = JSON.parse(e.data);
+
+    if(msg.type === 'booyah-registered'){
+      cameras.forEach(function(p){
+        if(p.uid) send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'camwall', uid:p.uid});
+      });
+    }
+
+    // New player added
+    if(msg.type === 'player-joined'){
+      var exists = cameras.find(function(c){ return c.uid===msg.uid; });
+      if(!exists){
+        cameras.push({uid:msg.uid, playerName:msg.playerName, team:msg.team||''});
+        buildGrid();
+      }
+      if(msg.uid) send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'camwall', uid:msg.uid});
+    }
+
+    if(msg.type === 'relay-offer' || msg.type === 'offer'){
+      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId||'camwall');
+    }
+    if(msg.type === 'relay-ice'){
+      const conn = peers.get(msg.uid);
+      if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
+    }
+  };
+}
+
+async function handleRelayOffer(uid, sdp, viewerId){
+  if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
+  var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
+  var pc = new RTCPeerConnection({ iceServers:iceServers });
+  peers.set(uid, {pc});
+
+  pc.ontrack = function(ev){
+    var vid   = document.getElementById('vid-'+uid);
+    var cell  = document.getElementById('cell-'+uid);
+    if(vid){
+      vid.srcObject = ev.streams[0];
+      var ph = document.getElementById('photo-'+uid);
+      if(ph) ph.style.display='none';
+      var w  = document.getElementById('wait-'+uid);
+      if(w)  w.style.display='none';
+      if(cell) cell.classList.add('live');
+      var ph2 = document.getElementById('photo-'+uid);
+      if(ph2){ ph2.style.opacity='0'; ph2.style.transition='opacity .5s'; }
+    }
+  };
+
+  pc.onicecandidate = function(ev){
+    if(ev.candidate) send({
+      type:'relay-ice-back',
+      roomName:ROOM, roomPassword:PASS,
+      uid:uid, candidate:ev.candidate, viewerId:viewerId||'camwall'
+    });
+  };
+
+  pc.onconnectionstatechange = function(){
+    console.log('[CAMWALL '+uid+']', pc.connectionState);
+    if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
+      var cell = document.getElementById('cell-'+uid);
+      if(cell) cell.classList.remove('live');
+      peers.delete(uid);
+    }
+  };
+
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  var answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  send({
+    type:'relay-answer',
+    roomName:ROOM, roomPassword:PASS,
+    uid:uid, sdp:pc.localDescription, viewerId:viewerId||'camwall'
+  });
+}
+
+function getTeamLogo(name){
+  if(!name) return null;
+  if(teamLogos[name]) return teamLogos[name];
+  var keys = Object.keys(teamLogos);
+  var lower = name.toLowerCase().trim();
+  for(var i=0;i<keys.length;i++){
+    if(keys[i].toLowerCase().trim()===lower) return teamLogos[keys[i]];
+  }
+  return null;
+}
+
+function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+</script>
+</body>
+</html>
