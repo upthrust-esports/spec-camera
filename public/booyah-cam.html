@@ -8,23 +8,23 @@
   :root{
     /* ── Overall grid position ── */
     --grid-top:    5px;
-    --grid-left:   75px;
-    --grid-right:  6px;
-    --grid-bottom: 28px;
-    --grid-gap:    6px;
+    --grid-left:   56px;
+    --grid-right:  7px;
+    --grid-bottom: 6px;
+    --grid-gap:    26px;
 
     /* ── Cell 0 (top-left) ── */
-    --c0-top:    0px;  --c0-bottom: 0px;
-    --c0-left:   0px;  --c0-right:  0px;
+    --c0-top:    -8px;  --c0-bottom: -7px;
+    --c0-left:   -23px;  --c0-right:  -18px;
     --c0-scale:  1;
 
     /* ── Cell 1 (top-right) ── */
     --c1-top:    0px;  --c1-bottom: 0px;
-    --c1-left:   0px;  --c1-right:  0px;
+    --c1-left:   1px;  --c1-right:  7px;
     --c1-scale:  1;
 
     /* ── Cell 2 (bottom-left) ── */
-    --c2-top:    0px;  --c2-bottom: 0px;
+    --c2-top:    -1px;  --c2-bottom: 0px;
     --c2-left:   0px;  --c2-right:  0px;
     --c2-scale:  1;
 
@@ -34,11 +34,10 @@
     --c3-scale:  1;
 
     /* ── Name label positions ── */
-    /* positive bottom = up from bottom, negative = lower */
-    --n0-bottom: 32px;  --n0-left: 10px;  --n0-size: 22px;
-    --n1-bottom: 32px;  --n1-left: 10px;  --n1-size: 22px;
-    --n2-bottom: 32px;  --n2-left: 10px;  --n2-size: 22px;
-    --n3-bottom: 32px;  --n3-left: 10px;  --n3-size: 22px;
+    --n0-bottom: 44px;  --n0-left: 33px;  --n0-size: 22px;
+    --n1-bottom: 44px;  --n1-left: 33px;  --n1-size: 22px;
+    --n2-bottom: 44px;  --n2-left: 33px;  --n2-size: 22px;
+    --n3-bottom: 44px;  --n3-left: 33px;  --n3-size: 22px;
   }
   html,body{width:1920px;height:1080px;overflow:hidden;background:transparent;}
 
@@ -65,7 +64,7 @@
   .cam-cell{
     position:relative;
     overflow:hidden;
-    background:transparent;
+    background:#06090f;
   }
 
   .cam-cell video{
@@ -286,13 +285,14 @@ async function showBooyah(teamName, teamLogoUrl, players){
     if(uid) vid.id = 'bvid-'+uid;
     cell.appendChild(vid);
 
-    // Photo fallback — player photo or default 1/2/3/4.png per cell
-    var fallbackSrc = photo || ('/image/' + (cellIndex + 1) + '.png');
+    // Always show default image as background, overlay player photo if exists
     var fbImg = document.createElement('img');
-    fbImg.src = fallbackSrc;
     fbImg.className = 'photo-fb';
     fbImg.id = 'bphoto-' + uid;
-    fbImg.onerror = function(){ this.style.display='none'; };
+    // Default image based on cell position (cycles 1-4)
+    var defSrc = '/players/' + (cellIndex + 1) + '.png';
+    fbImg.src = photo || defSrc;
+    fbImg.onerror = function(){ this.src = defSrc; };
     cell.appendChild(fbImg);
 
     // Name label
@@ -323,7 +323,7 @@ async function handleRelayOffer(uid, sdp, viewerId){
     if(vid){
       vid.srcObject = ev.streams[0];
       var ph = document.getElementById('bphoto-'+uid);
-      if(ph){ ph.style.opacity='0'; ph.style.transition='opacity .5s'; }
+      if(ph){ ph.style.opacity='0'; ph.style.transition='opacity .5s'; setTimeout(function(){ if(ph) ph.style.display='none'; }, 600); }
       var cw = document.getElementById('bcellwait-'+uid);
       if(cw) cw.style.display='none';
       var ld = document.getElementById('bld-'+uid);
