@@ -9,8 +9,8 @@
 
   .grid{
     display:grid;
-    grid-template-columns: repeat(12, 1fr);
-    grid-template-rows:    repeat(4,  1fr);
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows:    repeat(6, 1fr);
     gap:2px;
     width:1920px;
     height:1080px;
@@ -39,7 +39,9 @@
   .cam-cell .photo-fb{
     position:absolute;inset:0;
     width:100%;height:100%;
-    object-fit:cover;display:block;
+    object-fit:cover;
+    object-position:center top;
+    display:block;
     z-index:1;
   }
 
@@ -104,7 +106,7 @@
 const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
 const ROOM   = 'test';
 const PASS   = 'test';
-const TOTAL_SLOTS = 48; // fixed 12x4
+const TOTAL_SLOTS = 48; // fixed 8x6
 
 let ws = null;
 const peers        = new Map();
@@ -144,7 +146,7 @@ function buildGrid(){
     var team    = player ? (player.team || '') : '';
     var photo   = uid ? (playerPhotos[uid] || null) : null;
     var logo    = team ? getTeamLogo(team) : null;
-    var defImg  = '/image/' + ((i % 4) + 1) + '.png'; // cycles 1-4
+    var defImg  = '/players/' + ((i % 4) + 1) + '.png'; // cycles 1-4
 
     var cell = document.createElement('div');
     cell.className = 'cam-cell';
@@ -161,7 +163,7 @@ function buildGrid(){
     fb.className = 'photo-fb';
     fb.id = 'photo-' + (uid || 'slot'+i);
     fb.src = photo || defImg;
-    fb.onerror = function(){ this.src='/image/1.png'; };
+    fb.onerror = function(){ this.onerror=null; this.style.display='none'; };
     cell.appendChild(fb);
 
     // Video (hidden until live)
