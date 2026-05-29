@@ -237,7 +237,8 @@ app.get('/api/logos', (req, res) => {
 for (let i = 1; i <= 6; i++) {
   app.get('/spect' + i, (req, res) => res.sendFile(path.join(__dirname, 'public', 'obs-spect.html')));
 }
-app.get('/booyah', (req, res) => res.sendFile(path.join(__dirname, 'public', 'booyah-cam.html')));
+app.get('/booyah',   (req, res) => res.sendFile(path.join(__dirname, 'public', 'booyah-cam.html')));
+app.get('/camwall',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'camwall.html')));
 
 // ─── FF API Polling ───────────────────────────────────────────────────────────
 const FF_CONFIG = {
