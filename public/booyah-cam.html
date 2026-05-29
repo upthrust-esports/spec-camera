@@ -237,7 +237,7 @@ function connectWS(){
     if(msg.type === 'offer'){
       await handleRelayOffer(msg.uid, msg.sdp, 'booyah');
     }
-    if(msg.type === 'relay-ice'){
+    if(msg.type === 'relay-ice' || (msg.type === 'ice' && msg.from === 'player')){
       const conn = peers.get(msg.uid);
       if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
     }
@@ -336,7 +336,7 @@ async function handleRelayOffer(uid, sdp, viewerId){
     if(ev.candidate){
       console.log('[BOOYAH] Sending relay-ice-back for uid:', uid, 'type:', ev.candidate.type);
       send({
-        type:'relay-ice-back',
+        type:'direct-ice',
         roomName:ROOM, roomPassword:PASS,
         uid:uid, candidate:ev.candidate, viewerId: viewerId||'booyah'
       });
@@ -364,7 +364,7 @@ async function handleRelayOffer(uid, sdp, viewerId){
   var answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   send({
-    type:'relay-answer',
+    type:'direct-answer',
     roomName:ROOM, roomPassword:PASS,
     uid:uid, sdp:pc.localDescription, viewerId: viewerId||'booyah'
   });

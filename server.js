@@ -52,6 +52,13 @@ const spectators    = new Map();
 const spectConfigs  = new Map();
 const spectPollers  = new Map();
 const booyahDetected = new Set();
+// viewerRegistry: roomKey -> { viewerId: ws } — all connected viewers
+const viewerRegistry = new Map();
+
+function getViewers(key) {
+  if (!viewerRegistry.has(key)) viewerRegistry.set(key, new Map());
+  return viewerRegistry.get(key);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function roomKey(n, p) { return n + '::' + p; }
@@ -442,21 +449,25 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.type === 'register-booyah-cam') {
+    if (msg.type === 'register-booyah-cam' || msg.type === 'register-camwall') {
       if (!rooms.has(key)) return sendTo(ws, { type:'error', message:'Room not found' });
-      wsRoom = key; wsId = 'booyah:' + Date.now(); wsRole = 'obs';
+      const isBoooyah = msg.type === 'register-booyah-cam';
+      wsRoom = key;
+      wsId   = (isBoooyah ? 'booyah:' : 'camwall:') + Date.now();
+      wsRole = 'obs';
       getPeers(key).set(wsId, ws);
-      sendTo(ws, { type:'booyah-registered' });
-      if (booyahDetected.has(key)) sendTo(ws, { type:'booyah-detected', teamName:'', players:[] });
-      // Tell admins booyah cam connected — so they relay existing streams
-      broadcastAdmins(key, { type:'booyah-registered' });
-      // Send all stored offers so booyah cam connects immediately
+      const regType = isBoooyah ? 'booyah-registered' : 'camwall-registered';
+      sendTo(ws, { type: regType });
+      if (isBoooyah && booyahDetected.has(key)) sendTo(ws, { type:'booyah-detected', teamName:'', players:[] });
+      // Notify admins
+      broadcastAdmins(key, { type: regType });
+      // Send ALL stored offers directly to this viewer — direct P2P with player
       if (latestOffers.has(key)) {
         Object.entries(latestOffers.get(key)).forEach(([uid, sdp]) => {
           sendTo(ws, { type:'offer', uid, sdp });
         });
       }
-      // Tell all players to re-send offer
+      // Tell all players to re-send offer so this viewer gets fresh connection
       getPeers(key).forEach((pws, id) => {
         if (id.startsWith('uid:')) sendTo(pws, { type:'admin-joined' });
       });
@@ -529,12 +540,16 @@ wss.on('connection', (ws) => {
       if (msg.target === 'obs' && msg.spectId) {
         sendTo(getPeers(key).get('obs:' + msg.spectId), { type:'offer', uid: msg.uid, sdp: msg.sdp });
       } else {
-        broadcastAdmins(key, { type:'offer', uid: msg.uid, sdp: msg.sdp });
+        // Store latest offer
         if (!latestOffers.has(key)) latestOffers.set(key, {});
         latestOffers.get(key)[msg.uid] = msg.sdp;
-        // Forward to booyah cam
+        // Forward to admin
+        broadcastAdmins(key, { type:'offer', uid: msg.uid, sdp: msg.sdp });
+        // Forward DIRECTLY to all viewers (booyah, camwall, obs)
         getPeers(key).forEach((pws, id) => {
-          if (id.startsWith('booyah:')) sendTo(pws, { type:'offer', uid: msg.uid, sdp: msg.sdp });
+          if (id.startsWith('booyah:') || id.startsWith('camwall:')) {
+            sendTo(pws, { type:'offer', uid: msg.uid, sdp: msg.sdp });
+          }
         });
       }
       return;
@@ -621,10 +636,24 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // viewer-answer: booyah/spect answers a viewer-offer from player
+    // viewer-answer: booyah/camwall/spect answers player offer directly
     if (msg.type === 'viewer-answer') {
       const playerWs = getPeers(key).get('uid:' + msg.uid);
       sendTo(playerWs, { type:'viewer-answer', sdp: msg.sdp, viewerId: msg.viewerId });
+      return;
+    }
+
+    // direct-answer: viewer answers player offer (no relay through admin)
+    if (msg.type === 'direct-answer') {
+      const playerWs = getPeers(key).get('uid:' + msg.uid);
+      sendTo(playerWs, { type:'viewer-answer', sdp: msg.sdp, viewerId: msg.viewerId });
+      return;
+    }
+
+    // direct-ice: ICE from viewer to player
+    if (msg.type === 'direct-ice') {
+      const playerWs = getPeers(key).get('uid:' + msg.uid);
+      sendTo(playerWs, { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'admin', viewerId: msg.viewerId });
       return;
     }
 
@@ -642,9 +671,11 @@ wss.on('connection', (ws) => {
         Object.entries(s).forEach(([spectId, watchedUid]) => {
           if (watchedUid === msg.uid) sendTo(getPeers(key).get('obs:' + spectId), { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'player' });
         });
-        // Forward ICE to booyah cam too
+        // Forward ICE to ALL viewers (booyah + camwall + obs)
         getPeers(key).forEach((pws, id) => {
-          if (id.startsWith('booyah:')) sendTo(pws, { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'player' });
+          if (id.startsWith('booyah:') || id.startsWith('camwall:') || id.startsWith('obs:')) {
+            sendTo(pws, { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'player' });
+          }
         });
       } else {
         sendTo(getPeers(key).get('uid:' + msg.uid), { type:'ice', uid: msg.uid, candidate: msg.candidate, from:'admin' });

@@ -298,9 +298,10 @@ function connectWS() {
       toast('⚠️ Camera stopped by operator');
     }
 
-    // Admin or booyah/spect viewer connected — re-send offer
+    // Admin or viewer connected — renegotiate
     if (msg.type === 'admin-joined') {
-      if (pc && localStream) {
+      if (localStream) {
+        // Renegotiate primary PC for admin
         await renegotiate();
       }
     }
@@ -319,10 +320,17 @@ function connectWS() {
       }
     }
 
-    // Viewer (booyah/spect) answered our dedicated viewer offer
+    // Viewer answered — set answer on their dedicated PC
     if (msg.type === 'viewer-answer') {
       const viewerId = msg.viewerId || 'obs';
-      const vpc = pcMap.get(viewerId);
+      // Check pcMap first, then create new PC if needed
+      let vpc = pcMap.get(viewerId);
+      if (!vpc) {
+        // Viewer answered but we don't have a PC — create one and set answer
+        console.log('[VIEWER] No PC for', viewerId, '— creating');
+        await createViewerConnection(viewerId);
+        vpc = pcMap.get(viewerId);
+      }
       if (vpc && vpc.signalingState !== 'stable') {
         await vpc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
         console.log('[VIEWER] Answer set for:', viewerId);

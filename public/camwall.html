@@ -8,6 +8,7 @@
   html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0d14;}
 
   /* 12 teams × 4 players = 48 cells — 12 cols × 4 rows */
+  /* Each cell is 16:4 ratio (ultra-wide) */
   .grid{
     display:grid;
     grid-template-columns:repeat(12,1fr);
@@ -15,6 +16,21 @@
     gap:2px;
     width:1920px;height:1080px;
     background:#111;
+  }
+
+  /* Force 16:4 video content inside each cell */
+  /* Cell width = 1920/12 = 160px, 16:4 height = 160*4/16 = 40px */
+  /* Video will show in 16:4 letterboxed area centered vertically */
+  .cam-cell video,
+  .cam-cell .photo-fb{
+    position:absolute;
+    /* 16:4 crop window centered in cell */
+    top:50%;left:0;right:0;
+    height:auto;
+    aspect-ratio:16/4;
+    transform:translateY(-50%);
+    width:100%;
+    object-fit:cover;
   }
 
   .cam-cell{
@@ -25,19 +41,25 @@
 
   /* Photo always visible behind video */
   .cam-cell .photo-fb{
-    position:absolute;inset:0;
-    width:100%;height:100%;
-    object-fit:cover;object-position:center top;
+    position:absolute;
+    top:50%;left:0;
+    width:100%;
+    aspect-ratio:16/4;
+    object-fit:cover;object-position:center;
     display:block;z-index:1;
+    transform:translateY(-50%);
   }
 
-  /* Video hidden until live, shown on top */
+  /* Video hidden until live */
   .cam-cell video{
-    position:absolute;inset:0;
-    width:100%;height:100%;
+    position:absolute;
+    top:50%;left:0;
+    width:100%;
+    aspect-ratio:16/4;
     object-fit:cover;display:block;
     z-index:2;opacity:0;
     transition:opacity .4s;
+    transform:translateY(-50%);
   }
   .cam-cell.live video{opacity:1;}
 
@@ -209,18 +231,15 @@ function buildGrid(){
 function connectWS(){
   ws = new WebSocket(WS_URL);
   ws.onopen = function(){
-    send({ type:'register-booyah-cam', roomName:ROOM, roomPassword:PASS });
+    send({ type:'register-camwall', roomName:ROOM, roomPassword:PASS });
     console.log('[CAMWALL] WS connected');
   };
   ws.onclose = function(){ setTimeout(connectWS, 2000); };
   ws.onmessage = async function(e){
     var msg = JSON.parse(e.data);
 
-    if(msg.type === 'booyah-registered'){
-      console.log('[CAMWALL] Registered, requesting', cameras.length, 'streams');
-      cameras.forEach(function(p){
-        if(p && p.uid) send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'camwall', uid:p.uid});
-      });
+    if(msg.type === 'camwall-registered'){
+      console.log('[CAMWALL] Registered — waiting for direct player offers');
     }
 
     if(msg.type === 'player-joined' && msg.uid){
@@ -238,10 +257,19 @@ function connectWS(){
       if(cell) cell.classList.remove('live');
     }
 
-    if(msg.type === 'relay-offer' || msg.type === 'offer'){
-      await handleRelayOffer(msg.uid, msg.sdp, msg.viewerId||'camwall');
+    // Direct offer from player (via server)
+    if(msg.type === 'offer'){
+      await handleDirectOffer(msg.uid, msg.sdp);
     }
-
+    // ICE from player
+    if(msg.type === 'ice' && msg.from === 'player'){
+      var conn = peers.get(msg.uid);
+      if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
+    }
+    // Also handle relay fallback
+    if(msg.type === 'relay-offer'){
+      await handleDirectOffer(msg.uid, msg.sdp);
+    }
     if(msg.type === 'relay-ice'){
       var conn = peers.get(msg.uid);
       if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
