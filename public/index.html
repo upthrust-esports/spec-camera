@@ -6,7 +6,6 @@
 <title>Player Camera — Upthrust Esports</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-<script src="/lk-client.js"></script>
 <style>
   :root{--bg:#080c10;--surface:#0e1520;--card:#111b28;--border:#1e2f45;--accent:#00e5ff;--accent2:#ff6b35;--green:#00ff88;--red:#ff3b5c;--yellow:#ffd166;--text:#e0eaf5;--muted:#5a7a9a;}
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -98,7 +97,6 @@
       </div>
       <div class="conn-status connecting" id="conn-badge"><span class="dot"></span><span id="conn-text">CONNECTING</span></div>
     </div>
-
     <div class="cam-box">
       <video id="local-video" autoplay muted playsinline></video>
       <div id="sz-overlay">
@@ -113,10 +111,9 @@
       <div class="cam-overlay" id="cam-overlay">
         <div class="icon">📷</div>
         <p>Camera access required.</p>
-        <button class="allow-btn" onclick="startCamera()">ALLOW CAMERA</button>
+        <button class="allow-btn" onclick="requestCamera()">ALLOW CAMERA</button>
       </div>
     </div>
-
     <div class="cam-info">
       <div class="ci-item"><div class="ci-label">Camera</div><div class="ci-val orange" id="ci-cam">—</div></div>
       <div class="ci-item"><div class="ci-label">Mic</div><div class="ci-val orange" id="ci-mic">—</div></div>
@@ -129,179 +126,254 @@
 </div>
 <div class="toast" id="toast"></div>
 <script>
-let localStream = null;
-const S = { uid:'', playerName:'' };
+var localStream  = null;
+var lkRoom       = null;   // LiveKit Room object
+var S            = { uid:'', playerName:'', opPass:'' };
+var notifyWs     = null;
+var _tt;
 
 async function joinRoom() {
-  const uid    = v('p-uid');
-  const opPass = v('p-pass');
+  var uid    = document.getElementById('p-uid').value.trim();
+  var opPass = document.getElementById('p-pass').value.trim();
   if (!uid)    { toast('Enter your UID'); return; }
   if (!opPass) { toast('Enter the operator password'); return; }
 
-  lkClient._opPass = opPass;
-  toast('Connecting...');
-
+  toast('Verifying...');
   try {
-    // Validate first
-    const res  = await fetch('/api/room/player-join', {
+    var res  = await fetch('/api/room/player-join', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ uid, operatorPassword: opPass })
     });
-    const data = await res.json();
+    var data = await res.json();
     if (!res.ok) { toast('❌ ' + (data.error||'Join failed')); return; }
 
     S.uid        = uid;
     S.playerName = data.playerName;
+    S.opPass     = opPass;
+    S._token     = data.token;
+    S._lkUrl     = data.livekitUrl;
+
     document.getElementById('pl-name').textContent = data.playerName;
     document.getElementById('pl-uid').textContent  = uid;
     document.getElementById('v-login').style.display = 'none';
     document.getElementById('v-live').style.display  = 'flex';
     setStatus('connecting', 'CONNECTING...');
-    toast('✅ Joined as ' + data.playerName);
 
-    // Connect WS for notifications
-    lkClient.connectWS('player');
+    // Connect notification WS
+    connectNotifyWS();
 
-    await startCamera(data.token, data.livekitUrl);
+    // Start camera
+    await startCamera();
   } catch(e) { toast('❌ ' + e.message); }
 }
 
-async function startCamera(token, livekitUrl) {
-  try {
+function connectNotifyWS() {
+  var wsUrl = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
+  notifyWs = new WebSocket(wsUrl);
+  notifyWs.onopen = function() {
+    notifyWs.send(JSON.stringify({ type:'register', role:'player' }));
+  };
+  notifyWs.onmessage = function(e) {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode:'user', width:{ideal:1920,min:640}, height:{ideal:1080,min:480}, frameRate:{ideal:30} },
-        audio: { echoCancellation:true, noiseSuppression:true },
-      });
-    } catch {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} },
-        audio: true,
-      });
-    }
-
-    const vid = document.getElementById('local-video');
-    vid.srcObject = localStream;
-    document.getElementById('cam-overlay').classList.add('hidden');
-
-    const vt = localStream.getVideoTracks()[0];
-    const at = localStream.getAudioTracks()[0];
-    document.getElementById('ci-cam').textContent = vt ? vt.label.slice(0,20)||'Active' : 'None';
-    document.getElementById('ci-mic').textContent = at ? at.label.slice(0,20)||'Active' : 'None';
-    document.getElementById('ci-stream').textContent = 'LIVE';
-
-    vid.addEventListener('loadedmetadata', updateSafeZone);
-    vid.addEventListener('resize', updateSafeZone);
-
-    // Connect to LiveKit room
-    lkClient.room = new LivekitClient.Room({ adaptiveStream:true, dynacast:true });
-
-    lkClient.room.on(LivekitClient.RoomEvent.Connected, () => {
-      setStatus('live', 'LIVE');
-      document.getElementById('ci-conn').textContent = 'CONNECTED';
-      toast('🔴 Camera is live!');
-    });
-
-    lkClient.room.on(LivekitClient.RoomEvent.Disconnected, () => {
-      setStatus('error', 'DISCONNECTED');
-      document.getElementById('ci-conn').textContent = 'DISCONNECTED';
-      setTimeout(() => reconnect(), 3000);
-    });
-
-    lkClient.room.on(LivekitClient.RoomEvent.Reconnected, () => {
-      setStatus('live', 'LIVE');
-      toast('Reconnected ✅');
-    });
-
-    await lkClient.room.connect(livekitUrl, token);
-
-    for (const track of localStream.getTracks()) {
-      await lkClient.room.localParticipant.publishTrack(
-        new LivekitClient.LocalTrack(track)
-      );
-    }
-
-    // Notify server
-    await fetch('/api/player/online', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ uid:S.uid, playerName:S.playerName })
-    }).catch(()=>{});
-
-    // Handle force disconnect
-    window.addEventListener('lk-notify', (e) => {
-      if (e.detail.type === 'force-disconnect') {
+      var msg = JSON.parse(e.data);
+      if (msg.type === 'force-disconnect') {
         toast('⚠️ Camera stopped by operator');
         leaveRoom();
       }
+    } catch {}
+  };
+  notifyWs.onclose = function() {
+    setTimeout(connectNotifyWS, 3000);
+  };
+  // Keepalive
+  setInterval(function() {
+    if (notifyWs && notifyWs.readyState === 1) notifyWs.send(JSON.stringify({type:'ping'}));
+  }, 20000);
+}
+
+async function startCamera() {
+  // Get camera
+  if (!localStream) {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30} },
+        audio: { echoCancellation:true, noiseSuppression:true },
+      });
+    } catch(e) {
+      toast('❌ Camera: ' + e.message);
+      setStatus('error', 'CAM ERROR');
+      return;
+    }
+  }
+
+  var vid = document.getElementById('local-video');
+  vid.srcObject = localStream;
+  document.getElementById('cam-overlay').classList.add('hidden');
+
+  var vt = localStream.getVideoTracks()[0];
+  var at = localStream.getAudioTracks()[0];
+  document.getElementById('ci-cam').textContent = vt ? (vt.label.slice(0,18)||'Active') : 'None';
+  document.getElementById('ci-mic').textContent = at ? (at.label.slice(0,18)||'Active') : 'None';
+
+  vid.addEventListener('loadedmetadata', updateSafeZone);
+  vid.addEventListener('resize', updateSafeZone);
+
+  await connectLiveKit();
+}
+
+async function connectLiveKit() {
+  // Disconnect existing room if any
+  if (lkRoom) {
+    try { lkRoom.disconnect(); } catch {}
+    lkRoom = null;
+  }
+
+  // Get fresh token
+  try {
+    var res  = await fetch('/api/room/player-join', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ uid: S.uid, operatorPassword: S.opPass })
+    });
+    var data = await res.json();
+    if (!res.ok) { toast('❌ Token error'); setTimeout(connectLiveKit, 5000); return; }
+    S._token = data.token;
+    S._lkUrl = data.livekitUrl;
+  } catch(e) {
+    toast('Server unreachable, retrying...');
+    setTimeout(connectLiveKit, 5000);
+    return;
+  }
+
+  try {
+    lkRoom = new LivekitClient.Room({
+      adaptiveStream: false,
+      dynacast:       false,
+      reconnectPolicy: { maxRetries: 10, retryDelayMs: 2000 },
     });
 
+    // ── Room events ────────────────────────────────────────────────────────
+    lkRoom.on(LivekitClient.RoomEvent.Connected, async function() {
+      console.log('[PLAYER] Connected to LiveKit room');
+      setStatus('live', 'LIVE 🔴');
+      document.getElementById('ci-stream').textContent = 'LIVE';
+      document.getElementById('ci-conn').textContent   = 'CONNECTED';
+      toast('🔴 Camera is LIVE!');
+
+      // Notify server player is online
+      await fetch('/api/player/online', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ uid:S.uid, playerName:S.playerName })
+      }).catch(function(){});
+    });
+
+    lkRoom.on(LivekitClient.RoomEvent.Disconnected, function(reason) {
+      console.log('[PLAYER] Disconnected:', reason);
+      setStatus('error', 'DISCONNECTED');
+      document.getElementById('ci-stream').textContent = 'OFFLINE';
+      // Notify server
+      fetch('/api/player/offline', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ uid:S.uid })
+      }).catch(function(){});
+      // Auto reconnect
+      setTimeout(connectLiveKit, 3000);
+    });
+
+    lkRoom.on(LivekitClient.RoomEvent.Reconnecting, function() {
+      setStatus('connecting', 'RECONNECTING...');
+    });
+
+    lkRoom.on(LivekitClient.RoomEvent.Reconnected, function() {
+      setStatus('live', 'LIVE 🔴');
+      toast('Reconnected ✅');
+    });
+
+    // ── Connect ────────────────────────────────────────────────────────────
+    await lkRoom.connect(S._lkUrl, S._token);
+
+    // ── Publish tracks ─────────────────────────────────────────────────────
+    if (localStream) {
+      var videoTrack = localStream.getVideoTracks()[0];
+      var audioTrack = localStream.getAudioTracks()[0];
+
+      if (videoTrack) {
+        var lkVideo = new LivekitClient.LocalVideoTrack(videoTrack, {}, false);
+        await lkRoom.localParticipant.publishTrack(lkVideo, {
+          source: LivekitClient.Track.Source.Camera,
+          simulcast: false,
+        });
+        console.log('[PLAYER] Video published');
+      }
+
+      if (audioTrack) {
+        var lkAudio = new LivekitClient.LocalAudioTrack(audioTrack, {}, false);
+        await lkRoom.localParticipant.publishTrack(lkAudio, {
+          source: LivekitClient.Track.Source.Microphone,
+        });
+        console.log('[PLAYER] Audio published');
+      }
+    }
+
   } catch(e) {
-    toast('❌ Camera: ' + e.message);
+    console.error('[PLAYER] LiveKit error:', e);
+    toast('Connection error, retrying...');
     setStatus('error', 'ERROR');
+    setTimeout(connectLiveKit, 5000);
   }
 }
 
-async function reconnect() {
-  if (!localStream) return;
-  setStatus('connecting', 'RECONNECTING...');
+async function requestCamera() {
   try {
-    const res  = await fetch('/api/room/player-join', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ uid:S.uid, operatorPassword:lkClient._opPass })
-    });
-    const data = await res.json();
-    if (res.ok) await startCamera(data.token, data.livekitUrl);
-  } catch { setTimeout(reconnect, 5000); }
+    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+    document.getElementById('local-video').srcObject = localStream;
+    document.getElementById('cam-overlay').classList.add('hidden');
+    await connectLiveKit();
+  } catch(e) { toast('❌ ' + e.message); }
 }
 
 function leaveRoom() {
-  if (localStream) localStream.getTracks().forEach(t => t.stop());
-  if (lkClient.room) lkClient.room.disconnect();
+  if (localStream) { localStream.getTracks().forEach(function(t){t.stop();}); localStream = null; }
+  if (lkRoom)      { lkRoom.disconnect(); lkRoom = null; }
+  if (notifyWs)    { notifyWs.onclose = null; notifyWs.close(); notifyWs = null; }
   fetch('/api/player/offline', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ uid:S.uid })
-  }).catch(()=>{});
-  localStream = null;
+  }).catch(function(){});
   document.getElementById('v-live').style.display  = 'none';
   document.getElementById('v-login').style.display = 'flex';
   document.getElementById('cam-overlay').classList.remove('hidden');
   document.getElementById('local-video').srcObject = null;
   document.getElementById('ci-stream').textContent = 'OFFLINE';
+  document.getElementById('ci-conn').textContent   = '—';
+  setStatus('connecting', 'CONNECTING');
   toast('Left room');
 }
 
 function updateSafeZone() {
-  const vid=document.getElementById('local-video'), ov=document.getElementById('sz-overlay');
+  var vid=document.getElementById('local-video'), ov=document.getElementById('sz-overlay');
   if(!vid||!ov)return;
-  const vw=vid.videoWidth, vh=vid.videoHeight;
+  var vw=vid.videoWidth, vh=vid.videoHeight;
   if(!vw||!vh)return;
   ov.style.display='block';
-  const dw=vid.clientWidth, dh=vid.clientHeight;
+  var dw=vid.clientWidth, dh=vid.clientHeight;
   if(vh>vw){
-    const visH=Math.round(dw*9/16), maskH=Math.round((dh-visH)/2);
-    document.getElementById('sz-top').style.height=maskH+'px';
-    document.getElementById('sz-top').style.top='0';
-    document.getElementById('sz-bot').style.height=maskH+'px';
-    document.getElementById('sz-bot').style.bottom='0';
-    document.getElementById('sz-bot').style.top='auto';
-    document.getElementById('sz-active').style.top=maskH+'px';
-    document.getElementById('sz-active').style.height=visH+'px';
+    var visH=Math.round(dw*9/16), maskH=Math.round((dh-visH)/2);
+    document.getElementById('sz-top').style.cssText='height:'+maskH+'px;top:0;';
+    document.getElementById('sz-bot').style.cssText='height:'+maskH+'px;bottom:0;';
+    document.getElementById('sz-active').style.cssText='top:'+maskH+'px;height:'+visH+'px;';
   } else {
     document.getElementById('sz-top').style.height='0px';
     document.getElementById('sz-bot').style.height='0px';
-    document.getElementById('sz-active').style.top='0';
-    document.getElementById('sz-active').style.height='100%';
+    document.getElementById('sz-active').style.cssText='top:0;height:100%;';
   }
 }
 
 function setStatus(cls, txt) {
-  const el=document.getElementById('conn-badge');
+  var el=document.getElementById('conn-badge');
   el.className='conn-status '+cls;
   el.innerHTML='<span class="dot"></span><span>'+txt+'</span>';
 }
-function v(id){return document.getElementById(id).value.trim();}
-let _tt;
-function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2800);}
+function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){el.classList.remove('show');},2800);}
 </script>
 </body>
 </html>
