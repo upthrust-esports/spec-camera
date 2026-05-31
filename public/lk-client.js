@@ -150,8 +150,8 @@ class LKClient {
     console.log('[LK] Viewer connected to room:', this.room.name);
 
     // Handle already-connected participants
-    this.room.participants.forEach((participant) => {
-      participant.tracks.forEach((pub) => {
+    this.room.remoteParticipants.forEach((participant) => {
+      participant.trackPublications.forEach((pub) => {
         if (pub.isSubscribed && pub.track && pub.track.kind === LivekitClient.Track.Kind.Video) {
           const meta = this._parseMeta(participant.metadata);
           const uid  = meta.uid || participant.identity.replace('player_', '');
@@ -201,9 +201,9 @@ class LKClient {
     console.log('[LK] Admin connected');
 
     // Existing participants
-    this.room.participants.forEach(participant => {
+    this.room.remoteParticipants.forEach(participant => {
       if (!participant.identity.startsWith('player_')) return;
-      participant.tracks.forEach(pub => {
+      participant.trackPublications.forEach(pub => {
         if (pub.isSubscribed && pub.track?.kind === LivekitClient.Track.Kind.Video) {
           const meta   = this._parseMeta(participant.metadata);
           const uid    = meta.uid || participant.identity.replace('player_', '');
