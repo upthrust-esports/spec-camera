@@ -557,6 +557,9 @@ const ADMIN_U  = 'angry', ADMIN_P = 'angry0306';
 var ws  = null; // legacy stub
 var _tt = null; // toast timer
 let S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
+
+// Helper to ensure S.cameras is always a valid array
+function ensureCameras() { if (!Array.isArray(S.cameras)) S.cameras = []; }
 const onlinePlayers  = new Map();
 const audioAnalysers = new Map();
 // peerConns kept for legacy renderFeeds compatibility — streams stored here too
@@ -1022,7 +1025,13 @@ async function importPlayers(){
       body:JSON.stringify({roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken,players:importStaging.map(p=>({playerName:p.name,uid:p.uid,slot:p.slot,team:p.team}))}),
     });
     const data=await res.json();
-    if(res.ok){S.cameras=data.cameras;toast('✅ Imported '+data.added+' new · '+data.total+' total');}
+    if(res.ok){
+      toast('✅ Imported '+data.added+' new · '+data.total+' total');
+      // Reload cameras from server
+      const cr = await fetch(API+'/api/room/cameras');
+      const cd = await cr.json();
+      if(cd.cameras) S.cameras = cd.cameras;
+    }
     else toast(data.error||'Import failed');
   }catch{
     // local fallback
@@ -1105,7 +1114,11 @@ async function addCam(){
     const res=await fetch(API+'/api/room/camera/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken,playerName:name,uid,slot,team})});
     const data=await res.json();
     if(!res.ok){toast(data.error);return;}
-    S.cameras=data.cameras;
+    // Server returns {success:true} — add locally
+    ensureCameras();
+    const ex=S.cameras.findIndex(c=>c.uid===uid);
+    const cam={playerName:name,uid,slot,team};
+    if(ex>=0)S.cameras[ex]=cam; else S.cameras.push(cam);
   }catch{const ex=S.cameras.findIndex(c=>c.uid===uid);const cam={playerName:name,uid,slot,team};if(ex>=0)S.cameras[ex]=cam;else S.cameras.push(cam);}
   renderCameras();renderTeams();updateSelects();
   ['cn','cu'].forEach(id=>document.getElementById(id).value='');
@@ -1116,7 +1129,7 @@ async function addCam(){
 async function removeCam(uid){
   if(uid && uid.dataset) uid = uid.dataset.uid; // support element or string
   try{await fetch(`${API}/api/room/camera/${uid}?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`,{method:'DELETE'});}catch{}
-  S.cameras=S.cameras.filter(c=>c.uid!==uid);
+  ensureCameras(); S.cameras=S.cameras.filter(c=>c.uid!==uid);
   renderCameras();renderTeams();updateSelects();
   document.getElementById('d-reg').textContent=S.cameras.length;
   toast('Removed');
@@ -1124,7 +1137,7 @@ async function removeCam(uid){
 
 async function clearAllCams(){
   if(!confirm('Clear ALL '+S.cameras.length+' players?'))return;
-  try{await fetch(`${API}/api/room/cameras/all?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`,{method:'DELETE'});}catch{}
+  try{await fetch(`${API}/api/room/cameras/all`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken})});}catch{}
   S.cameras=[];
   renderCameras();renderTeams();updateSelects();
   document.getElementById('d-reg').textContent=0;
@@ -1132,6 +1145,7 @@ async function clearAllCams(){
 }
 
 function renderCameras(){
+  ensureCameras();
   const search=(document.getElementById('cam-search')?.value||'').toLowerCase();
   const teamF=document.getElementById('cam-team-filter')?.value||'';
   const statF=document.getElementById('cam-status-filter')?.value||'';
@@ -1189,7 +1203,12 @@ function updateSelects(){
 }
 
 async function refreshAll(){
-  try{const res=await fetch(`${API}/api/room/cameras?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`);const data=await res.json();if(res.ok){S.cameras=data.cameras;renderCameras();renderTeams();updateSelects();toast('Refreshed');}else toast(data.error);}catch{toast('Cannot reach server');}
+  try{
+    const res=await fetch(`${API}/api/room/cameras`);
+    const data=await res.json();
+    if(res.ok){ S.cameras=data.cameras||[]; renderCameras();renderTeams();updateSelects();toast('Refreshed'); }
+    else toast(data.error);
+  }catch{ toast('Cannot reach server'); }
 }
 
 // ── Drag & Drop ───────────────────────────────────────────────────────────────
