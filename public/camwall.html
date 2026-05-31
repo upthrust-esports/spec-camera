@@ -3,341 +3,147 @@
 <head>
 <meta charset="UTF-8"/>
 <title>Cam Wall</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="/lk-client.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0d14;}
-
-  /* 12 teams × 4 players = 48 cells — 12 cols × 4 rows */
-  /* Each cell is 16:4 ratio (ultra-wide) */
-  .grid{
-    display:grid;
-    grid-template-columns:repeat(12,1fr);
-    grid-template-rows:repeat(4,1fr);
-    gap:2px;
-    width:1920px;height:1080px;
-    background:#111;
-  }
-
-  /* Force 16:4 video content inside each cell */
-  /* Cell width = 1920/12 = 160px, 16:4 height = 160*4/16 = 40px */
-  /* Video will show in 16:4 letterboxed area centered vertically */
-  .cam-cell video,
-  .cam-cell .photo-fb{
-    position:absolute;
-    /* 16:4 crop window centered in cell */
-    top:50%;left:0;right:0;
-    height:auto;
-    aspect-ratio:16/4;
-    transform:translateY(-50%);
-    width:100%;
-    object-fit:cover;
-  }
-
-  .cam-cell{
-    position:relative;overflow:hidden;
-    background:#06090f;
-    border:1px solid rgba(200,149,42,0.25);
-  }
-
-  /* Photo always visible behind video */
-  .cam-cell .photo-fb{
-    position:absolute;
-    top:50%;left:0;
-    width:100%;
-    aspect-ratio:16/4;
-    object-fit:cover;object-position:center;
-    display:block;z-index:1;
-    transform:translateY(-50%);
-  }
-
-  /* Video hidden until live */
-  .cam-cell video{
-    position:absolute;
-    top:50%;left:0;
-    width:100%;
-    aspect-ratio:16/4;
-    object-fit:cover;display:block;
-    z-index:2;opacity:0;
-    transition:opacity .4s;
-    transform:translateY(-50%);
-  }
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:repeat(4,1fr);gap:2px;width:1920px;height:1080px;background:#111;}
+  .cam-cell{position:relative;overflow:hidden;background:#06090f;border:1px solid rgba(200,149,42,0.25);}
+  .cam-cell .photo-fb{position:absolute;top:50%;left:0;width:100%;aspect-ratio:16/4;object-fit:cover;object-position:center;display:block;z-index:1;transform:translateY(-50%);}
+  .cam-cell video{position:absolute;top:50%;left:0;width:100%;aspect-ratio:16/4;object-fit:cover;display:block;z-index:2;opacity:0;transition:opacity .4s;transform:translateY(-50%);}
   .cam-cell.live video{opacity:1;}
-
-  /* Team logo watermark */
-  .team-logo{
-    position:absolute;
-    top:50%;left:50%;
-    transform:translate(-50%,-55%);
-    width:32px;height:32px;
-    object-fit:contain;opacity:0.3;
-    z-index:3;pointer-events:none;
-    transition:opacity .4s;
-  }
+  .team-logo{position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);width:32px;height:32px;object-fit:contain;opacity:0.3;z-index:3;pointer-events:none;transition:opacity .4s;}
   .cam-cell.live .team-logo{opacity:0;}
-
-  /* Player name */
-  .name-bar{
-    position:absolute;bottom:0;left:0;right:0;
-    z-index:5;padding:2px 4px;
-    font-family:'Rajdhani','Arial Narrow',sans-serif;
-    font-size:9px;font-weight:700;
-    color:#fff;letter-spacing:.5px;text-transform:uppercase;
-    text-shadow:0 1px 3px rgba(0,0,0,.9);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    background:linear-gradient(transparent,rgba(0,0,0,.6));
-  }
-
-  /* Live dot */
-  .live-dot{
-    position:absolute;top:2px;right:2px;
-    width:5px;height:5px;border-radius:50%;
-    background:#00ff88;opacity:0;z-index:5;
-    box-shadow:0 0 4px #00ff88;
-  }
+  .name-bar{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:2px 4px;font-family:'Rajdhani','Arial Narrow',sans-serif;font-size:9px;font-weight:700;color:#fff;letter-spacing:.5px;text-transform:uppercase;text-shadow:0 1px 3px rgba(0,0,0,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(transparent,rgba(0,0,0,.6));}
+  .live-dot{position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:#00ff88;opacity:0;z-index:5;box-shadow:0 0 4px #00ff88;transition:opacity .3s;}
   .cam-cell.live .live-dot{opacity:1;animation:ldp 1.5s infinite;}
   @keyframes ldp{0%,100%{opacity:1}50%{opacity:.3}}
-
-  /* Corner accents */
   .ca{position:absolute;width:5px;height:5px;z-index:6;pointer-events:none;}
   .ca.tl{top:1px;left:1px;border-top:1px solid rgba(200,149,42,.5);border-left:1px solid rgba(200,149,42,.5);}
   .ca.tr{top:1px;right:1px;border-top:1px solid rgba(200,149,42,.5);border-right:1px solid rgba(200,149,42,.5);}
   .ca.bl{bottom:1px;left:1px;border-bottom:1px solid rgba(200,149,42,.5);border-left:1px solid rgba(200,149,42,.5);}
   .ca.br{bottom:1px;right:1px;border-bottom:1px solid rgba(200,149,42,.5);border-right:1px solid rgba(200,149,42,.5);}
-
-  /* Team separator — thicker border on every 4th column right edge */
   .cam-cell.team-last{border-right:2px solid rgba(200,149,42,.6);}
 </style>
 </head>
 <body>
 <div class="grid" id="cam-grid"></div>
-
 <script>
-const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
-const ROOM   = 'test';
-const PASS   = 'test';
-const COLS   = 12; // 12 teams
-const ROWS   = 4;  // 4 players per team
-const TOTAL  = COLS * ROWS; // 48
-
-let ws = null;
-const peers        = new Map();
-const playerPhotos = {};
-const teamLogos    = {};
-let   cameras      = []; // sorted by team
+const TOTAL=48, playerPhotos={}, teamLogos={};
+let cameras=[];
 
 (async function(){
   try {
-    const [p,l,t,cam] = await Promise.all([
-      fetch('/api/players/photos'),
-      fetch('/api/logos'),
-      fetch('/api/turn-config'),
-      fetch('/api/spect/booyah-players?room='+ROOM+'&pass='+PASS)
+    const [p,l,cam] = await Promise.all([
+      fetch('/api/players/photos'), fetch('/api/logos'), fetch('/api/players/live')
     ]);
-    const pd=await p.json(); const ld=await l.json();
-    const td=await t.json(); const cd=await cam.json();
-    if(pd.photos) Object.assign(playerPhotos, pd.photos);
-    if(ld.logos)  Object.assign(teamLogos,    ld.logos);
-    if(td.iceServers) window.ICE_SERVERS = td.iceServers;
-
-    // Sort cameras by team so each team gets a column of 4
-    var raw = cd.players || [];
-    cameras = sortByTeam(raw);
-  } catch(e){ console.warn('Boot:', e); }
+    const pd=await p.json(); const ld=await l.json(); const cd=await cam.json();
+    if(pd.photos) Object.assign(playerPhotos,pd.photos);
+    if(ld.logos)  Object.assign(teamLogos,ld.logos);
+    cameras = sortByTeam(cd.players||[]);
+  } catch {}
 
   buildGrid();
-  connectWS();
+  lkClient.connectWS('camwall');
+
+  await lkClient.subscribeAll('camwall', null,
+    function(uid, stream, playerName, team) {
+      var exists = cameras.find(function(c){return c&&c.uid===uid;});
+      if(!exists){
+        cameras.push({uid,playerName:playerName||uid,team:team||''});
+        cameras=sortByTeam(cameras.filter(Boolean));
+        buildGrid();
+      }
+      var vid=document.getElementById('vid-'+uid);
+      var cell=document.getElementById('cell-'+uid);
+      if(vid&&stream){
+        vid.srcObject=stream;
+        if(cell)cell.classList.add('live');
+        var ph=document.getElementById('photo-'+uid);
+        if(ph){ph.style.opacity='0';ph.style.transition='opacity .5s';}
+      }
+    },
+    function(uid) {
+      var cell=document.getElementById('cell-'+uid);
+      if(cell)cell.classList.remove('live');
+      var ph=document.getElementById('photo-'+uid);
+      if(ph)ph.style.opacity='1';
+    }
+  );
+
+  // Listen for new players joining
+  window.addEventListener('lk-notify', function(e) {
+    const msg = e.detail;
+    if (msg.type === 'player-joined') {
+      var exists = cameras.find(function(c){return c&&c.uid===msg.uid;});
+      if(!exists){
+        cameras.push({uid:msg.uid,playerName:msg.playerName||msg.uid,team:msg.team||''});
+        cameras=sortByTeam(cameras.filter(Boolean));
+        buildGrid();
+      }
+    }
+    if (msg.type === 'player-left') {
+      var cell=document.getElementById('cell-'+msg.uid);
+      if(cell)cell.classList.remove('live');
+    }
+  });
 })();
 
 function sortByTeam(players){
-  // Group by team, then flatten — each team = 4 consecutive slots
-  var teams = {};
-  players.forEach(function(p){
-    var t = p.team || 'NO_TEAM';
-    if(!teams[t]) teams[t] = [];
-    teams[t].push(p);
-  });
-  var result = [];
-  Object.keys(teams).sort().forEach(function(t){
-    var members = teams[t].slice(0,4);
-    while(members.length < 4) members.push(null); // pad to 4
-    result = result.concat(members);
-  });
+  var teams={};
+  players.forEach(function(p){var t=p.team||'NO_TEAM';if(!teams[t])teams[t]=[];teams[t].push(p);});
+  var result=[];
+  Object.keys(teams).sort().forEach(function(t){var m=teams[t].slice(0,4);while(m.length<4)m.push(null);result=result.concat(m);});
   return result;
 }
 
 function buildGrid(){
-  var grid = document.getElementById('cam-grid');
-  grid.innerHTML = '';
+  var grid=document.getElementById('cam-grid');
+  grid.innerHTML='';
+  for(var i=0;i<TOTAL;i++){
+    var player=cameras[i]||null;
+    var uid=player?String(player.uid||''):'';
+    var pname=player?(player.playerName||uid):'';
+    var team=player?(player.team||''):'';
+    var photo=uid?(playerPhotos[uid]||null):null;
+    var logo=team?getTeamLogo(team):null;
+    var defImg='/players/'+((i%4)+1)+'.png';
 
-  for(var i = 0; i < TOTAL; i++){
-    var player  = cameras[i] || null;
-    var uid     = player ? String(player.uid || '') : '';
-    var pname   = player ? (player.playerName || uid) : '';
-    var team    = player ? (player.team || '') : '';
-    var photo   = uid ? (playerPhotos[uid] || null) : null;
-    var logo    = team ? getTeamLogo(team) : null;
-    // Default image cycles 1-4
-    var defImg  = '/players/' + ((i % 4) + 1) + '.png';
-    var imgSrc  = photo || defImg;
+    var cell=document.createElement('div');
+    cell.className='cam-cell'+(i%4===3?' team-last':'');
+    if(uid)cell.id='cell-'+uid;
 
-    // Team position in row — last player of team gets thicker right border
-    var posInTeam = i % 4; // 0,1,2,3
-    var isLastInTeam = (posInTeam === 3);
-
-    var cell = document.createElement('div');
-    cell.className = 'cam-cell' + (isLastInTeam ? ' team-last' : '');
-    if(uid) cell.id = 'cell-'+uid;
-
-    // Photo fallback (always shown behind video)
-    var fb = document.createElement('img');
-    fb.className = 'photo-fb';
-    if(uid) fb.id = 'photo-'+uid;
-    fb.src = imgSrc;
-    fb.onerror = function(){ this.onerror=null; this.src=defImg; };
+    var fb=document.createElement('img');
+    fb.className='photo-fb';
+    fb.id=uid?'photo-'+uid:'photo-slot'+i;
+    fb.src=photo||defImg;
+    fb.onerror=function(){this.onerror=null;this.src=defImg;};
     cell.appendChild(fb);
 
-    // Video
-    var vid = document.createElement('video');
-    vid.autoplay=true; vid.playsInline=true; vid.muted=true;
-    if(uid) vid.id = 'vid-'+uid;
+    var vid=document.createElement('video');
+    vid.autoplay=true;vid.playsInline=true;vid.muted=true;
+    if(uid)vid.id='vid-'+uid;
     cell.appendChild(vid);
 
-    // Team logo
-    if(logo){
-      var li=document.createElement('img');
-      li.className='team-logo'; li.src=logo;
-      if(uid) li.id='logo-'+uid;
-      cell.appendChild(li);
-    }
+    // Attach existing stream
+    if(uid){var s=lkClient.getStream(uid);if(s){vid.srcObject=s;cell.classList.add('live');fb.style.opacity='0';}}
 
-    // Corners
-    ['tl','tr','bl','br'].forEach(function(pos){
-      var ca=document.createElement('div'); ca.className='ca '+pos; cell.appendChild(ca);
-    });
-
-    // Live dot
-    var dot=document.createElement('div'); dot.className='live-dot'; cell.appendChild(dot);
-
-    // Name
-    if(pname){
-      var bar=document.createElement('div'); bar.className='name-bar';
-      bar.textContent=pname; cell.appendChild(bar);
-    }
-
+    if(logo){var li=document.createElement('img');li.className='team-logo';li.src=logo;cell.appendChild(li);}
+    ['tl','tr','bl','br'].forEach(function(p2){var ca=document.createElement('div');ca.className='ca '+p2;cell.appendChild(ca);});
+    var dot=document.createElement('div');dot.className='live-dot';cell.appendChild(dot);
+    if(pname){var bar=document.createElement('div');bar.className='name-bar';bar.textContent=pname;cell.appendChild(bar);}
     grid.appendChild(cell);
   }
 }
 
-function connectWS(){
-  ws = new WebSocket(WS_URL);
-  ws.onopen = function(){
-    send({ type:'register-camwall', roomName:ROOM, roomPassword:PASS });
-    console.log('[CAMWALL] WS connected');
-  };
-  ws.onclose = function(){ setTimeout(connectWS, 2000); };
-  ws.onmessage = async function(e){
-    var msg = JSON.parse(e.data);
-
-    if(msg.type === 'camwall-registered'){
-      console.log('[CAMWALL] Registered — waiting for direct player offers');
-    }
-
-    if(msg.type === 'player-joined' && msg.uid){
-      var exists = cameras.find(function(x){ return x && x.uid===msg.uid; });
-      if(!exists){
-        cameras.push({uid:msg.uid, playerName:msg.playerName||msg.uid, team:msg.team||''});
-        cameras = sortByTeam(cameras.filter(Boolean));
-        buildGrid();
-      }
-      send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'camwall', uid:msg.uid});
-    }
-
-    if(msg.type === 'player-left' && msg.uid){
-      var cell = document.getElementById('cell-'+msg.uid);
-      if(cell) cell.classList.remove('live');
-    }
-
-    // Direct offer from player (via server)
-    if(msg.type === 'offer'){
-      await handleDirectOffer(msg.uid, msg.sdp);
-    }
-    // ICE from player
-    if(msg.type === 'ice' && msg.from === 'player'){
-      var conn = peers.get(msg.uid);
-      if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
-    }
-    // Also handle relay fallback
-    if(msg.type === 'relay-offer'){
-      await handleDirectOffer(msg.uid, msg.sdp);
-    }
-    if(msg.type === 'relay-ice'){
-      var conn = peers.get(msg.uid);
-      if(conn && conn.pc) try{ await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch{}
-    }
-  };
-}
-
-async function handleRelayOffer(uid, sdp, viewerId){
-  if(!uid) return;
-  if(peers.has(uid)){ try{peers.get(uid).pc.close();}catch{} peers.delete(uid); }
-
-  var iceServers = window.ICE_SERVERS || [{urls:'stun:stun.l.google.com:19302'}];
-  var pc = new RTCPeerConnection({ iceServers:iceServers });
-  peers.set(uid, {pc});
-
-  pc.ontrack = function(ev){
-    var vid  = document.getElementById('vid-'+uid);
-    var cell = document.getElementById('cell-'+uid);
-    if(vid && ev.streams[0]){
-      vid.srcObject = ev.streams[0];
-      if(cell) cell.classList.add('live');
-      var ph = document.getElementById('photo-'+uid);
-      if(ph){ ph.style.opacity='0'; ph.style.transition='opacity .5s'; }
-      console.log('[CAMWALL] Live:', uid);
-    }
-  };
-
-  pc.onicecandidate = function(ev){
-    if(ev.candidate) send({
-      type:'relay-ice-back',
-      roomName:ROOM, roomPassword:PASS,
-      uid:uid, candidate:ev.candidate, viewerId:viewerId||'camwall'
-    });
-  };
-
-  pc.onconnectionstatechange = function(){
-    console.log('[CAMWALL PC '+uid+']', pc.connectionState);
-    if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
-      // Keep last frame — just reconnect
-      peers.delete(uid);
-      var cell = document.getElementById('cell-'+uid);
-      if(cell) cell.classList.remove('live');
-      // Show photo again
-      var ph = document.getElementById('photo-'+uid);
-      if(ph){ ph.style.opacity='1'; }
-      // Auto reconnect after 3s
-      setTimeout(function(){
-        if(!peers.has(uid)){
-          send({type:'obs-ready', roomName:ROOM, roomPassword:PASS, spectId:'camwall', uid:uid});
-        }
-      }, 3000);
-    }
-  };
-
-  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-  var ans = await pc.createAnswer();
-  await pc.setLocalDescription(ans);
-  send({type:'relay-answer', roomName:ROOM, roomPassword:PASS, uid:uid, sdp:pc.localDescription, viewerId:viewerId||'camwall'});
-}
-
 function getTeamLogo(name){
-  if(!name) return null;
-  if(teamLogos[name]) return teamLogos[name];
-  var keys=Object.keys(teamLogos), low=name.toLowerCase().trim();
-  for(var i=0;i<keys.length;i++) if(keys[i].toLowerCase().trim()===low) return teamLogos[keys[i]];
+  if(!name)return null;
+  if(teamLogos[name])return teamLogos[name];
+  var keys=Object.keys(teamLogos),low=name.toLowerCase().trim();
+  for(var i=0;i<keys.length;i++)if(keys[i].toLowerCase().trim()===low)return teamLogos[keys[i]];
   return null;
 }
-function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
 </script>
 </body>
 </html>

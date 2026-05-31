@@ -546,426 +546,205 @@ tr:hover td{background:rgba(0,229,255,0.015);}
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- Socket.IO + MediaSoup client -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mediasoup-client@3/dist/mediasoup-client.min.js"></script>
+<script src="/ms-client.js"></script>
 <script>
-const API    = location.origin;
-const WS_URL = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
-const ADMIN_U = 'angry', ADMIN_P = 'angry0306';
+const API      = location.origin;
+const ADMIN_U  = 'angry', ADMIN_P = 'angry0306';
 
-// Fetch TURN config from server (credentials stored as env vars on Render)
-let ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];
-async function loadIceServers() {
-  try {
-    const res  = await fetch(location.origin + '/api/turn-config');
-    const data = await res.json();
-    if (data.iceServers) ICE_SERVERS = data.iceServers;
-    console.log('[ICE] Loaded ' + ICE_SERVERS.length + ' servers');
-  } catch(e) { console.warn('[ICE] Using STUN only:', e); }
-}
-
-let S  = { roomName:'', roomPassword:'', adminToken:'', cameras:[] };
-let ws = null;
-const peerConns      = new Map();
-const onlinePlayers  = new Map();
+// State
+let S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
+const onlinePlayers  = new Map(); // uid → { playerName, slot, team, stream }
 const audioAnalysers = new Map();
-// teamLogos persisted in localStorage: teamName -> dataURL
-const teamLogos = JSON.parse(localStorage.getItem('upthrust_logos')||'{}');
-// playerPhotos: uid or playerName -> URL from public/players/ folder
-const playerPhotos = {};
+// peerConns kept for legacy renderFeeds compatibility — streams stored here too
+const peerConns      = new Map(); // uid → { stream }
+const teamLogos      = JSON.parse(localStorage.getItem('upthrust_logos')||'{}');
+const playerPhotos   = {};
+let   importStaging  = [];
 
+// ── Fetch player photos ───────────────────────────────────────────────────────
 async function fetchPlayerPhotos() {
   try {
     const res  = await fetch('/api/players/photos');
     const data = await res.json();
-    if(data.photos){
-      Object.entries(data.photos).forEach(function(e){ playerPhotos[e[0]] = e[1]; });
-    }
-    console.log('[PHOTOS] Loaded:', Object.keys(playerPhotos));
-  } catch(e){ console.warn('fetchPlayerPhotos:', e); }
+    if (data.photos) Object.assign(playerPhotos, data.photos);
+    console.log('[PHOTOS] Loaded:', Object.keys(playerPhotos).length);
+  } catch(e) { console.warn('fetchPlayerPhotos:', e); }
 }
 
-// Get photo for a player — try UID first, then playerName, then partial match
 function getPlayerPhoto(uid, playerName) {
-  if(uid && playerPhotos[uid])         return playerPhotos[uid];
-  if(playerName && playerPhotos[playerName]) return playerPhotos[playerName];
-  // try case-insensitive name match
-  if(playerName){
-    var lower = playerName.toLowerCase().trim();
-    var keys  = Object.keys(playerPhotos);
-    for(var i=0;i<keys.length;i++){
-      if(keys[i].toLowerCase().trim() === lower) return playerPhotos[keys[i]];
-    }
+  if (uid && playerPhotos[uid]) return playerPhotos[uid];
+  if (playerName && playerPhotos[playerName]) return playerPhotos[playerName];
+  if (playerName) {
+    const lower = playerName.toLowerCase().trim();
+    const keys  = Object.keys(playerPhotos);
+    for (let i=0;i<keys.length;i++) if(keys[i].toLowerCase().trim()===lower) return playerPhotos[keys[i]];
   }
-  // Default fallback images from /players/ folder
   return '/players/1.png';
 }
 
-// Load logos from server public/logos/ folder (filename = team name)
 async function fetchServerLogos() {
   try {
     const res  = await fetch('/api/logos');
     const data = await res.json();
     if (data.logos) {
-      // Store with original filename key
-      Object.entries(data.logos).forEach(function(entry){
-        var team = entry[0];
-        var url  = entry[1];
+      Object.entries(data.logos).forEach(([team,url]) => {
         teamLogos[team] = url;
-        // Also store lowercase and trimmed variants for fuzzy match
         teamLogos[team.toLowerCase().trim()] = url;
         teamLogos[team.replace(/\s+/g,'_')] = url;
         teamLogos[team.replace(/_/g,' ')] = url;
       });
     }
-  } catch(e){ console.warn('fetchServerLogos error:', e); }
+  } catch(e) { console.warn('fetchServerLogos:', e); }
 }
 
-// Helper: get logo for a team name with fuzzy matching
 function getTeamLogo(teamName) {
-  if(!teamName) return null;
-  // Try exact match first
-  if(teamLogos[teamName]) return teamLogos[teamName];
-  // Try lowercase
-  if(teamLogos[teamName.toLowerCase()]) return teamLogos[teamName.toLowerCase()];
-  // Try trimmed
-  var trimmed = teamName.trim();
-  if(teamLogos[trimmed]) return teamLogos[trimmed];
-  // Try replacing spaces with underscores and vice versa
-  var underscored = teamName.replace(/\s+/g,'_');
-  if(teamLogos[underscored]) return teamLogos[underscored];
-  var spaced = teamName.replace(/_/g,' ');
-  if(teamLogos[spaced]) return teamLogos[spaced];
-  // Try case-insensitive search through all keys
-  var lowerName = teamName.toLowerCase().trim();
-  var keys = Object.keys(teamLogos);
-  for(var i=0;i<keys.length;i++){
-    if(keys[i].toLowerCase().trim() === lowerName){
-      return teamLogos[keys[i]];
-    }
-  }
+  if (!teamName) return null;
+  if (teamLogos[teamName]) return teamLogos[teamName];
+  const lower  = teamName.toLowerCase().trim();
+  const keys   = Object.keys(teamLogos);
+  for (let i=0;i<keys.length;i++) if(keys[i].toLowerCase().trim()===lower) return teamLogos[keys[i]];
   return null;
 }
 
-let importStaging = [];
-
 // ── Login ─────────────────────────────────────────────────────────────────────
 async function adminLogin() {
-  const user=v('a-user'), pass=v('a-pass');
-  if (user!==ADMIN_U||pass!==ADMIN_P) { document.getElementById('err-msg').style.display='block'; document.getElementById('a-pass').value=''; return; }
-  document.getElementById('err-msg').style.display='none';
+  const user = v('a-user'), pass = v('a-pass');
+  if (user !== ADMIN_U || pass !== ADMIN_P) {
+    document.getElementById('err-msg').style.display = 'block';
+    document.getElementById('a-pass').value = '';
+    return;
+  }
+  document.getElementById('err-msg').style.display = 'none';
   try {
-    const res  = await fetch(API+'/api/admin/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
-    const data = await res.json();
-    if (!res.ok) { toast(data.error||'Server error'); return; }
-    S = { roomName:data.roomName, roomPassword:data.roomPassword, adminToken:data.adminToken, cameras:data.cameras||[], _user:user, _pass:pass };
-    showDashboard(); connectWS(); toast('Welcome, '+user+'!');
-    // Auto-refresh token every 10 minutes (Render may restart)
-    setInterval(async function(){
-      const res = await fetch(API+'/api/admin/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:S._user,password:S._pass})});
-      const d = await res.json();
-      if(res.ok && d.adminToken) { S.adminToken=d.adminToken; console.log('[TOKEN] Auto-refreshed'); }
-    }, 10*60*1000);
-  } catch { toast('Cannot reach server'); }
-}
-
-// Re-fetch fresh adminToken from server (token changes on every server restart)
-async function refreshAdminToken() {
-  try {
-    const user = document.getElementById('l-user')?.value || 'angry';
-    const pass = document.getElementById('l-pass')?.value || 'angry0306';
-    const res  = await fetch(API+'/api/admin/session',{
+    const res  = await fetch(API+'/api/admin/session', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({username:user, password:pass})
+      body: JSON.stringify({ username:user, password:pass })
     });
     const data = await res.json();
-    if (res.ok && data.adminToken) {
-      S.adminToken    = data.adminToken;
-      S.roomName      = data.roomName;
-      S.roomPassword  = data.roomPassword;
-      console.log('[TOKEN] Refreshed adminToken:', data.adminToken.slice(0,8)+'...');
-      return true;
-    }
-  } catch(e) { console.error('[TOKEN] refresh failed:', e); }
-  return false;
+    if (!res.ok) { toast(data.error||'Server error'); return; }
+    S = { ...S, adminToken: data.adminToken, cameras: data.cameras||[], _user:user, _pass:pass };
+    S.roomName     = data.roomName     || 'main';
+    S.roomPassword = data.roomPassword || 'main';
+    showDashboard();
+    toast('Welcome, ' + user + '!');
+  } catch { toast('Cannot reach server'); }
 }
 
 function showDashboard() {
   document.getElementById('vl').classList.remove('active');
   document.getElementById('vd').classList.add('active');
-  document.getElementById('h-pill').style.display='inline-flex';
-  document.getElementById('h-logout').style.display='inline-block';
-  document.getElementById('d-room').textContent=S.roomName;
+  document.getElementById('h-pill').style.display    = 'inline-flex';
+  document.getElementById('h-logout').style.display  = 'inline-block';
+  document.getElementById('d-room').textContent      = S.roomName;
   updateBooyahUrl();
-  Promise.all([fetchServerLogos(), fetchPlayerPhotos()]).then(function(){
-    console.log('[LOGOS] Loaded:', Object.keys(teamLogos));
-    console.log('[TEAMS] Camera teams:', [...new Set(S.cameras.map(function(c){return c.team;}).filter(Boolean))]);
+
+  // Connect mediasoup
+  connectMediaSoup();
+
+  // Load assets
+  Promise.all([fetchServerLogos(), fetchPlayerPhotos()]).then(() => {
     renderLogosGrid(); renderCameras(); renderTeams(); updateSelects(); loadSpectStatus();
   });
+
+  loadOpPassword();
 }
 
 function logout() {
-  peerConns.forEach(({pc})=>pc&&pc.close()); peerConns.clear(); onlinePlayers.clear();
-  audioAnalysers.forEach(a=>{cancelAnimationFrame(a.animId);a.ctx.close();}); audioAnalysers.clear();
-  if(ws)ws.close(); ws=null;
-  S={roomName:'',roomPassword:'',adminToken:'',cameras:[]};
+  onlinePlayers.clear();
+  audioAnalysers.forEach(a => { cancelAnimationFrame(a.animId); try{a.ctx.close();}catch{} });
+  audioAnalysers.clear();
+  msClient.destroy();
+  window.msClient = new MSClient();
+  S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
   document.getElementById('vd').classList.remove('active');
   document.getElementById('vl').classList.add('active');
-  document.getElementById('h-pill').style.display='none';
-  document.getElementById('h-logout').style.display='none';
-  document.getElementById('a-user').value=''; document.getElementById('a-pass').value='';
+  document.getElementById('h-pill').style.display   = 'none';
+  document.getElementById('h-logout').style.display = 'none';
+  document.getElementById('a-user').value = '';
+  document.getElementById('a-pass').value = '';
   toast('Logged out');
 }
 
-// ── WS ────────────────────────────────────────────────────────────────────────
-function connectWS() {
-  ws=new WebSocket(WS_URL);
-  ws.onopen=()=>wsSend({type:'register-admin',roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken});
-  ws.onmessage=async(e)=>{
-    const msg=JSON.parse(e.data);
-    if(msg.type==='admin-registered'){ toast('📡 Watching for players…'); msg.onlinePlayers?.forEach(uid=>{const c=S.cameras.find(x=>x.uid===uid);if(c)playerCameOnline(uid,c.playerName,c.slot,c.team);}); }
-    if(msg.type==='player-joined'){playerCameOnline(msg.uid,msg.playerName,msg.slot,msg.team);toast('🟢 '+msg.playerName);}
-    if(msg.type==='player-left'){
-      const c=S.cameras.find(x=>x.uid===msg.uid);
-      cleanupRelayPCs(msg.uid);
-      playerWentOffline(msg.uid);
-      toast('🔴 '+(c?.playerName||msg.uid));
-    }
-    if(msg.type==='offer') await handleOffer(msg.uid,msg.sdp);
-    if(msg.type==='ice'&&msg.from==='player'){const conn=peerConns.get(msg.uid);if(conn?.pc)try{await conn.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch{}}
-    if(msg.type==='error'){
-      toast('WS: '+msg.message);
-      // If invalid token error, refresh
-      if(msg.message && msg.message.includes('token')) refreshAdminToken();
-    }
-    if(msg.type==='player-force-disconnected'){
-      playerWentOffline(msg.uid);
-      toast('📷 Camera stopped: '+msg.uid);
-    }
-    // Relay answer from booyah/spect → update relay PC
-    if(msg.type==='relay-answer'){
-      await handleRelayAnswer(msg.uid, msg.viewerId, msg.sdp);
-    }
-    if(msg.type==='relay-ice-back'){
-      await handleRelayIce(msg.uid, msg.viewerId, msg.candidate);
-    }
-
-    // Booyah cam just connected — relay all existing streams to it
-    if(msg.type==='booyah-registered'){
-      console.log('[RELAY] Booyah/camwall registered, forwarding', peerConns.size, 'streams to all');
-      peerConns.forEach(function(conn, uid){
-        if(conn && conn.stream){
-          relayToViewer(uid, conn.stream, 'booyah');
-          relayToViewer(uid, conn.stream, 'camwall');
-        }
-      });
-    }
-
-    // Spect viewer connected — relay the correct player stream to it
-    if(msg.type==='spect-viewer-registered'){
-      var rawId   = msg.spectId || '';
-      // Handle booyah cam separately
-      if(rawId === 'booyah' || rawId === 'camwall'){
-        var viewerIdRaw = rawId;
-        var uid = msg.uid;
-        console.log('[RELAY]', viewerIdRaw, 'requesting uid:', uid);
-        if(uid){
-          var conn = peerConns.get(uid);
-          if(conn && conn.stream){
-            relayToViewer(uid, conn.stream, viewerIdRaw);
-          }
-        } else {
-          // Relay ALL current streams to this viewer
-          peerConns.forEach(function(conn2, uid2){
-            if(conn2 && conn2.stream) relayToViewer(uid2, conn2.stream, viewerIdRaw);
-          });
-        }
-        return;
-      }
-      var slotNum  = parseInt(rawId.replace(/[^0-9]/g,'')) || 0;
-      var spectId  = 'SPECT' + slotNum;
-      var slot     = spectSlots && spectSlots.find(function(x){ return x.slot===slotNum; });
-      var uid      = slot ? slot.uid : null;
-      console.log('[RELAY] Spect viewer registered:', spectId, 'slotNum:', slotNum, 'uid:', uid);
-      if(uid){
-        var conn = peerConns.get(uid);
-        if(conn && conn.stream){
-          console.log('[RELAY] Relaying to', spectId, 'for uid:', uid);
-          relayToViewer(uid, conn.stream, spectId);
-        } else {
-          console.log('[RELAY] Player not live yet, uid:', uid, 'conn:', !!conn);
-        }
-      } else {
-        console.log('[RELAY] No uid assigned to slot', slotNum, '— assign player first');
-      }
-    }
-
-    if(msg.type==='booyah-detected'){
-      document.getElementById('booyah-badge').className='live-badge';
-      document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH: '+esc(msg.teamName||'');
-      toast('🏆 BOOYAH: '+(msg.teamName||''));
-    }
-  };
-  ws.onclose=()=>toast('WS disconnected');
-}
-
-// ── WebRTC ────────────────────────────────────────────────────────────────────
-async function handleOffer(uid,sdp) {
-  if(peerConns.has(uid))peerConns.get(uid).pc.close();
-  const pc=new RTCPeerConnection({iceServers: ICE_SERVERS});
-  peerConns.set(uid,{pc,stream:null});
-  pc.ontrack=(event)=>{
-    const conn=peerConns.get(uid); if(conn)conn.stream=event.streams[0];
-    const vid=document.getElementById('vid-'+uid);
-    if(vid){
-      vid.srcObject=event.streams[0];
-      const w=document.getElementById('wait-'+uid);
-      if(w) w.style.display='none';
-    }
-    updateFeedStatus(uid,'live'); startAudioMeter(uid,event.streams[0]); renderFeeds();
-    // Forward this stream to booyah cam and spect viewers
-    forwardStreamToViewers(uid, event.streams[0]);
-  };
-  pc.onicecandidate=({candidate})=>{if(candidate)wsSend({type:'ice',roomName:S.roomName,roomPassword:S.roomPassword,uid,candidate,from:'admin'});};
-  pc.onconnectionstatechange=()=>{
-    updateFeedStatus(uid,pc.connectionState);
-    if(pc.connectionState==='failed'||pc.connectionState==='disconnected')playerWentOffline(uid);
-  };
-  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-  const ans=await pc.createAnswer(); await pc.setLocalDescription(ans);
-  wsSend({type:'answer',roomName:S.roomName,roomPassword:S.roomPassword,uid,sdp:pc.localDescription});
-}
-
-// ── Stream relay: admin forwards player streams to booyah/spect ──────────────
-// relayPCs: uid -> { booyah: RTCPeerConnection, spect1: RTCPeerConnection, ... }
-const relayPCs = new Map();
-
-async function forwardStreamToViewers(uid, stream) {
-  setTimeout(async function(){
-    // Relay to ALL viewers simultaneously — booyah + camwall + all spect slots
-    await relayToViewer(uid, stream, 'booyah');
-    await relayToViewer(uid, stream, 'camwall');
-    if (spectSlots && spectSlots.length) {
-      spectSlots.forEach(async function(slot) {
-        if (slot.uid === uid) {
-          await relayToViewer(uid, stream, 'SPECT' + slot.slot);
-        }
-      });
-    }
-    console.log('[RELAY] Forwarded uid:', uid, 'to booyah + camwall + spects');
-  }, 500);
-}
-
-// Call this when spect assignment changes — relay stream to new spect viewer
-async function relayStreamToSpect(slotNum, uid) {
-  const conn = peerConns.get(uid);
-  if (conn && conn.stream) {
-    await relayToViewer(uid, conn.stream, 'SPECT' + slotNum);
-  }
-}
-
-async function relayToViewer(uid, stream, viewerId) {
-  const iceServers = ICE_SERVERS || [{ urls: 'stun:stun.l.google.com:19302' }];
-  const rpc = new RTCPeerConnection({ iceServers });
-
-  if (!relayPCs.has(uid)) relayPCs.set(uid, {});
-  // Only close THIS viewer's old relay — keep all other viewers' relays alive
-  const oldRpc = relayPCs.get(uid)[viewerId];
-  if (oldRpc) { try { oldRpc.close(); } catch {} }
-  relayPCs.get(uid)[viewerId] = rpc;
-  console.log('[RELAY] Relay uid:', uid, 'viewer:', viewerId, '| all viewers:', Object.keys(relayPCs.get(uid)));
-
-  // ICE candidate queue — store candidates that arrive before remote description is set
-  rpc._iceQueue = [];
-  rpc._remoteSet = false;
-
-  // Add all tracks from the player stream
-  stream.getTracks().forEach(track => rpc.addTrack(track, stream));
-
-  rpc.onicecandidate = ({ candidate }) => {
-    if (candidate) {
-      console.log('[RELAY] Sending relay-ice to', viewerId, 'for uid:', uid, 'type:', candidate.type);
-      wsSend({
-        type: 'relay-ice',
-        roomName: S.roomName, roomPassword: S.roomPassword,
-        adminToken: S.adminToken,
-        uid, viewerId, candidate
-      });
-    } else {
-      console.log('[RELAY] ICE gathering complete for', viewerId, uid);
-    }
-  };
-
-  rpc.onconnectionstatechange = () => {
-    console.log('[RELAY ' + viewerId + ' uid:' + uid + ']', rpc.connectionState);
-  };
-
+// ── MediaSoup connection ──────────────────────────────────────────────────────
+async function connectMediaSoup() {
   try {
-    const offer = await rpc.createOffer();
-    await rpc.setLocalDescription(offer);
-    wsSend({
-      type: 'relay-offer',
-      roomName: S.roomName, roomPassword: S.roomPassword,
-      adminToken: S.adminToken,
-      uid, viewerId, sdp: rpc.localDescription
+    await msClient.connect();
+
+    // Listen for new player streams
+    await msClient.startReceiving('admin',
+      // onStream — new camera feed arrived
+      function(uid, stream, playerName, team) {
+        console.log('[ADMIN] Stream arrived:', uid, playerName);
+        // Find camera in list
+        const cam = S.cameras.find(c => c.uid === uid);
+        if (cam) {
+          playerCameOnline(uid, cam.playerName, cam.slot, cam.team);
+        } else {
+          playerCameOnline(uid, playerName || uid, null, team || '');
+        }
+        // Store stream in peerConns for legacy renderFeeds compatibility
+        peerConns.set(uid, { stream });
+        // Attach stream to feed card video element
+        const vid = document.getElementById('vid-' + uid);
+        if (vid) {
+          vid.srcObject = stream;
+          const w = document.getElementById('wait-'+uid);
+          if(w) w.style.display = 'none';
+        }
+        updateFeedStatus(uid, 'live');
+        startAudioMeter(uid, stream);
+        renderFeeds();
+        // Update cameras list with live status
+        const existing = S.cameras.find(c => c.uid === uid);
+        if (!existing) {
+          S.cameras.push({ uid, playerName: playerName||uid, team: team||'', slot: null });
+          renderCameras(); renderTeams(); updateSelects();
+          document.getElementById('d-reg').textContent = S.cameras.length;
+        }
+      },
+      // onLeft — camera disconnected
+      function(uid) {
+        console.log('[ADMIN] Player left:', uid);
+        playerWentOffline(uid);
+      }
+    );
+
+    // Listen for force-disconnect event
+    window.addEventListener('force-disconnect', () => {
+      toast('⚠️ Force disconnect received');
     });
-    console.log('[RELAY] Sent offer to ' + viewerId + ' for uid:' + uid);
-  } catch(e) { console.error('[RELAY] offer error:', e); }
-}
 
-// Handle relay-answer from viewer (booyah/spect)
-// Called from WS message handler
-async function handleRelayAnswer(uid, viewerId, sdp) {
-  const rpcMap = relayPCs.get(uid);
-  console.log('[RELAY] handleRelayAnswer uid:', uid, 'viewerId:', viewerId, 'hasMap:', !!rpcMap, 'hasPC:', !!(rpcMap&&rpcMap[viewerId]), 'keys:', rpcMap?Object.keys(rpcMap):[]);
-  if (!rpcMap || !rpcMap[viewerId]) return;
-  const rpc = rpcMap[viewerId];
-  console.log('[RELAY] signalingState:', rpc.signalingState);
-  if (rpc.signalingState !== 'stable') {
-    await rpc.setRemoteDescription(new RTCSessionDescription(sdp));
-    rpc._remoteSet = true;
-    console.log('[RELAY] Answer set for', viewerId, uid, '— draining ICE queue:', rpc._iceQueue.length);
-    // Drain queued ICE candidates
-    for (const c of rpc._iceQueue) {
-      try { await rpc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
-    }
-    rpc._iceQueue = [];
+    // Update online count periodically
+    setInterval(async () => {
+      try {
+        const res  = await fetch('/api/players/live');
+        const data = await res.json();
+        document.getElementById('d-online').textContent = (data.players||[]).length;
+      } catch {}
+    }, 5000);
+
+    toast('📡 Watching for players…');
+    console.log('[ADMIN] MediaSoup connected');
+  } catch(e) {
+    console.error('[ADMIN] MediaSoup connect error:', e);
+    toast('Connection error — retrying…');
+    setTimeout(connectMediaSoup, 5000);
   }
 }
 
-async function handleRelayIce(uid, viewerId, candidate) {
-  const rpcMap = relayPCs.get(uid);
-  if (!rpcMap || !rpcMap[viewerId]) {
-    console.warn('[RELAY] No relay PC for', viewerId, uid);
-    return;
-  }
-  const rpc = rpcMap[viewerId];
-  if (!rpc._remoteSet) {
-    // Queue ICE until remote description is set
-    rpc._iceQueue = rpc._iceQueue || [];
-    rpc._iceQueue.push(candidate);
-    console.log('[RELAY] Queued ICE for', viewerId, uid, 'queue size:', rpc._iceQueue.length);
-    return;
-  }
-  try {
-    await rpc.addIceCandidate(new RTCIceCandidate(candidate));
-    console.log('[RELAY] ICE added for', viewerId, uid);
-  } catch(e) { console.error('[RELAY] ICE error:', e); }
+// ── Disconnect player (admin action) ─────────────────────────────────────────
+function disconnectPlayer(uid) {
+  if (!confirm('Stop camera for player ' + uid + '?')) return;
+  msClient.disconnectPlayer(uid);
+  playerWentOffline(uid);
+  toast('Camera stopped for: ' + uid);
 }
 
-// When player disconnects, close relay PCs
-function cleanupRelayPCs(uid) {
-  // Called when player disconnects — close all relays for this player
-  const rpcMap = relayPCs.get(uid);
-  if (rpcMap) {
-    Object.values(rpcMap).forEach(function(rpc){ try { rpc.close(); } catch {} });
-    relayPCs.delete(uid);
-    console.log('[RELAY] Cleaned all relays for uid:', uid);
-  }
-}
 
-// ── Audio Meter ───────────────────────────────────────────────────────────────
+
 function startAudioMeter(uid,stream) {
   try {
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
@@ -1003,13 +782,14 @@ function playerCameOnline(uid,playerName,slot,team){
 }
 function playerWentOffline(uid){
   onlinePlayers.delete(uid);
-  if(peerConns.has(uid)){peerConns.get(uid).pc.close();peerConns.delete(uid);}
+  peerConns.delete(uid); // clear from legacy map too
   stopAudioMeter(uid);
   // Clear video and show photo fallback
   var vid = document.getElementById('vid-'+uid);
   if(vid) vid.srcObject = null;
   var wait = document.getElementById('wait-'+uid);
   if(wait) wait.style.display = 'flex';
+  updateFeedStatus(uid, 'offline');
   renderOnlineList(); renderCameras(); renderTeams(); renderFeeds();
   document.getElementById('d-online').textContent=onlinePlayers.size;
 }
@@ -1101,12 +881,12 @@ function renderFeeds(){
           </div>`;
       }
       grid.appendChild(card);
-      // re-attach stream if exists
-      const conn=peerConns.get(uid);
-      if(conn?.stream){
+      // re-attach stream from mediasoup if exists
+      const msStream = msClient.getStream(uid);
+      if(msStream){
         const vid=document.getElementById('vid-'+uid);
         if(vid&&!vid.srcObject){
-          vid.srcObject=conn.stream;
+          vid.srcObject=msStream;
           const w=document.getElementById('wait-'+uid);if(w)w.style.display='none';
         }
       }
@@ -1552,7 +1332,8 @@ function handleSpectAutoUpdate(msg) {
 
 // Hook into existing WS message handler
 const _origWsMsg = ws ? ws.onmessage : null;
-function patchWsForSpect() {
+// patchWsForSpect legacy stub
+function patchWsForSpect() { return;
   if (!ws) return;
   const orig = ws.onmessage;
   ws.onmessage = async (e) => {
@@ -1665,32 +1446,21 @@ async function testBooyah() {
   // Send a fake booyah event for testing with first 4 registered players
   var testPlayers = S.cameras.slice(0,4).map(function(c){ return { uid:c.uid, playerName:c.playerName }; });
   var teamName    = testPlayers.length && S.cameras[0].team ? S.cameras[0].team : 'TEST TEAM';
-  wsSend({ type:'test-booyah', roomName:S.roomName, roomPassword:S.roomPassword, adminToken:S.adminToken, teamName:teamName, players:testPlayers });
+  msClient.booyahDetected(teamName);
   document.getElementById('booyah-badge').className='live-badge';
   document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH LIVE';
   toast('⚡ Test booyah sent!');
 }
 
 async function resetBooyah() {
-  wsSend({ type:'reset-booyah', roomName:S.roomName, roomPassword:S.roomPassword, adminToken:S.adminToken });
+  msClient.booyahReset();
   document.getElementById('booyah-badge').className='offline-badge';
   document.getElementById('booyah-badge').textContent='WAITING';
   toast('Booyah reset');
 }
 
 // ── Force disconnect a player camera ─────────────────────────────────────────
-function disconnectPlayer(uid) {
-  if (!confirm('Stop camera for player ' + uid + '? Their photo will show as fallback.')) return;
-  wsSend({
-    type: 'admin-disconnect-player',
-    roomName: S.roomName, roomPassword: S.roomPassword,
-    adminToken: S.adminToken, uid: uid,
-    reason: 'Stopped by operator'
-  });
-  // Immediately update UI on admin side
-  playerWentOffline(uid);
-  toast('Camera stopped for: ' + uid);
-}
+
 
 // ── Operator Password Management ─────────────────────────────────────────────
 let _passVisible = false;
@@ -1752,13 +1522,27 @@ function genRandomPass() {
   toast('Generated: ' + pass + ' — click SET to apply');
 }
 
-function wsSend(obj){if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj));}
+function wsSend(obj){ console.warn('[ADMIN] wsSend called (legacy):', obj.type); }
+async function refreshAdminToken() {
+  try {
+    const res  = await fetch(API+'/api/admin/session',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:S._user||'angry',password:S._pass||'angry0306'})
+    });
+    const data = await res.json();
+    if(res.ok && data.adminToken){ S.adminToken=data.adminToken; return true; }
+  } catch(e){ console.error('[TOKEN] refresh failed:', e); }
+  return false;
+}
 function v(id){return document.getElementById(id).value.trim();}
 function enc(s){return encodeURIComponent(s);}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 let _tt;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3000);}
 
+
+// ── Startup ──────────────────────────────────────────────────────────────────
+function copyText(t){navigator.clipboard.writeText(t).then(()=>toast("Copied!")).catch(()=>{});}
 renderLogosGrid();
 </script>
 </body>

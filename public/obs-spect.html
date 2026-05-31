@@ -3,188 +3,91 @@
 <head>
 <meta charset="UTF-8"/>
 <title>OBS Spect</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="/lk-client.js"></script>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html, body {
-    width:100%; height:100%;
-    background: transparent !important;
-    overflow: hidden;
-  }
-  #feed {
-    width:100%; height:100%;
-    object-fit: cover;
-    display: block;
-    background: transparent;
-  }
-  /* Transparent when no stream — OBS will show nothing */
-  body.no-stream {
-    background: transparent !important;
-  }
-  body.no-stream #feed {
-    display: none;
-  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;background:transparent;overflow:hidden;}
+  #feed{width:100%;height:100%;object-fit:cover;display:block;background:transparent;}
+  body.no-stream #feed{display:none;}
 </style>
 </head>
 <body class="no-stream">
-<video id="feed" autoplay playsinline muted="false"></video>
-
+<video id="feed" autoplay playsinline></video>
 <script>
-const pathMatch  = location.pathname.match(/spect(\d+)/i);
-const SPECT_ID   = pathMatch ? pathMatch[1] : '1';
-const ROOM_NAME  = 'test';
-const ROOM_PASS  = 'test';
-const WS_URL     = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
+const pathMatch = location.pathname.match(/spect(\d+)/i);
+const SPECT_ID  = pathMatch ? pathMatch[1] : '1';
+let currentUid  = null;
 
-let ws         = null;
-let currentUid = null;
-let pc         = null;          // active peer connection
-let nextPc     = null;          // pre-warming next connection
-let iceServers = [{ urls:'stun:stun.l.google.com:19302' }];
-
-// Load TURN config once
 (async function(){
+  // Connect WS for spect update notifications
+  lkClient.connectWS('spect');
+
+  // Get assigned uid
   try {
-    const d = await (await fetch('/api/turn-config')).json();
-    if (d.iceServers) iceServers = d.iceServers;
+    const res  = await fetch('/api/spect/' + SPECT_ID);
+    const data = await res.json();
+    if (data.uid) currentUid = data.uid;
   } catch {}
-  connectWS();
-})();
 
-// ── WebSocket ────────────────────────────────────────────────────────────────
-function connectWS() {
-  ws = new WebSocket(WS_URL);
-  ws.onopen = () => {
-    send({ type:'register-obs', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID });
-  };
-  ws.onclose = () => setTimeout(connectWS, 2000);
-  ws.onmessage = async (e) => {
-    const msg = JSON.parse(e.data);
+  // Subscribe to all streams
+  await lkClient.subscribeAll('spect', SPECT_ID,
+    function(uid, stream) {
+      if (uid === currentUid) showStream(stream);
+    },
+    function(uid) {
+      if (uid === currentUid) hideStream();
+    }
+  );
 
-    // Initial assignment on register
-    if (msg.type === 'obs-registered') {
+  // Show current uid stream if already connected
+  if (currentUid) {
+    const s = lkClient.getStream(currentUid);
+    if (s) showStream(s);
+  }
+
+  // Listen for spect assignment changes
+  window.addEventListener('lk-notify', function(e) {
+    const msg = e.detail;
+    if (msg.type === 'spect-update' && String(msg.spectId) === String(SPECT_ID)) {
       if (msg.uid && msg.uid !== currentUid) {
         currentUid = msg.uid;
-        send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:msg.uid });
+        const s = lkClient.getStream(msg.uid);
+        if (s) showStream(s);
+        else hideStream();
       } else if (!msg.uid) {
-        showTransparent();
-      }
-    }
-
-    // Spect assignment changed — instant switch
-    if (msg.type === 'spect-update' && msg.spectId === SPECT_ID) {
-      const newUid = msg.uid;
-      if (newUid && newUid !== currentUid) {
-        currentUid = newUid;
-        send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:newUid });
-      } else if (!newUid) {
         currentUid = null;
-        closePc();
-        showTransparent();
+        hideStream();
       }
     }
+    if (msg.type === 'connected' && msg.spectators) {
+      const uid = msg.spectators[SPECT_ID];
+      if (uid) { currentUid = uid; const s = lkClient.getStream(uid); if(s) showStream(s); }
+    }
+  });
 
-    // FF API auto-update
-    if (msg.type === 'spect-update-all' && msg.spectators) {
-      const newUid = msg.spectators[SPECT_ID];
-      if (newUid && newUid !== currentUid) {
-        currentUid = newUid;
-        send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:newUid });
-      } else if (!newUid && currentUid) {
-        currentUid = null;
-        closePc();
-        showTransparent();
+  // Poll fallback every 3s
+  setInterval(async () => {
+    try {
+      const res  = await fetch('/api/spect/' + SPECT_ID);
+      const data = await res.json();
+      if (data.uid && data.uid !== currentUid) {
+        currentUid = data.uid;
+        const s = lkClient.getStream(data.uid);
+        if (s) showStream(s);
       }
-    }
+    } catch {}
+  }, 3000);
+})();
 
-    // relay-offer from admin — answer immediately, no waiting
-    if (msg.type === 'relay-offer') {
-      await handleRelayOffer(msg.uid, msg.sdp);
-    }
-
-    // relay-ice from admin
-    if (msg.type === 'relay-ice') {
-      if (pc) try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch {}
-    }
-  };
+function showStream(stream) {
+  document.getElementById('feed').srcObject = stream;
+  document.body.classList.remove('no-stream');
 }
-
-// ── Handle relay offer — instant, no loading screen ─────────────────────────
-async function handleRelayOffer(uid, sdp) {
-  // Close old PC without showing transparent — new stream coming right away
-  if (pc) { try { pc.close(); } catch {} pc = null; }
-
-  const newPc = new RTCPeerConnection({ iceServers });
-
-  newPc.ontrack = (event) => {
-    const vid = document.getElementById('feed');
-    vid.srcObject = event.streams[0];
-    // Show instantly — no delay
-    document.body.classList.remove('no-stream');
-    console.log('[SPECT'+SPECT_ID+'] Stream live for uid:', uid);
-  };
-
-  newPc.onicecandidate = ({ candidate }) => {
-    if (candidate) send({
-      type: 'relay-ice-back',
-      roomName: ROOM_NAME, roomPassword: ROOM_PASS,
-      uid, candidate, viewerId: 'SPECT' + SPECT_ID
-    });
-  };
-
-  newPc.onconnectionstatechange = () => {
-    console.log('[SPECT'+SPECT_ID+']', newPc.connectionState);
-    if (newPc.connectionState === 'failed' || newPc.connectionState === 'disconnected') {
-      if (pc === newPc) {
-        // Only go transparent if no replacement is coming
-        setTimeout(() => {
-          if (pc === newPc || !pc) showTransparent();
-        }, 3000);
-      }
-    }
-  };
-
-  try {
-    await newPc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await newPc.createAnswer();
-    await newPc.setLocalDescription(answer);
-    send({
-      type: 'relay-answer',
-      roomName: ROOM_NAME, roomPassword: ROOM_PASS,
-      uid, sdp: newPc.localDescription, viewerId: 'SPECT' + SPECT_ID
-    });
-    pc = newPc;
-  } catch(e) {
-    console.error('[SPECT'+SPECT_ID+'] offer error:', e);
-    showTransparent();
-  }
-}
-
-function closePc() {
-  if (pc) { try { pc.close(); } catch {} pc = null; }
-}
-
-function showTransparent() {
-  const vid = document.getElementById('feed');
-  vid.srcObject = null;
+function hideStream() {
+  document.getElementById('feed').srcObject = null;
   document.body.classList.add('no-stream');
-  console.log('[SPECT'+SPECT_ID+'] Transparent — no stream');
 }
-
-// Poll API as fallback every 3s
-setInterval(async () => {
-  try {
-    const res  = await fetch('/api/spect/'+SPECT_ID+'?roomName='+encodeURIComponent(ROOM_NAME)+'&roomPassword='+encodeURIComponent(ROOM_PASS));
-    const data = await res.json();
-    if (data.uid && data.uid !== currentUid) {
-      currentUid = data.uid;
-      send({ type:'obs-ready', roomName:ROOM_NAME, roomPassword:ROOM_PASS, spectId:SPECT_ID, uid:data.uid });
-    } else if (!data.uid && currentUid && document.body.classList.contains('no-stream')) {
-      currentUid = null;
-    }
-  } catch {}
-}, 3000);
-
-function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 </script>
 </body>
 </html>
