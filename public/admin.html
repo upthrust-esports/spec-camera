@@ -554,8 +554,10 @@ const API      = location.origin;
 const ADMIN_U  = 'angry', ADMIN_P = 'angry0306';
 
 // State
+var ws  = null; // legacy stub
+var _tt = null; // toast timer
 let S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
-const onlinePlayers  = new Map(); // uid → { playerName, slot, team, stream }
+const onlinePlayers  = new Map();
 const audioAnalysers = new Map();
 // peerConns kept for legacy renderFeeds compatibility — streams stored here too
 const peerConns      = new Map(); // uid → { stream }
@@ -673,7 +675,7 @@ async function connectLiveKit() {
     // Get admin token from server
     const res  = await fetch('/api/admin/session', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username: S._user, password: S._pass })
+      body: JSON.stringify({ username: S._user || 'angry', password: S._pass || 'angry0306' })
     });
     const data = await res.json();
     if (!res.ok) { toast('Session error'); return; }
@@ -1533,6 +1535,7 @@ function genRandomPass() {
   toast('Generated: ' + pass + ' — click SET to apply');
 }
 
+
 function wsSend(obj){ console.warn('[ADMIN] wsSend called (legacy):', obj.type); }
 async function refreshAdminToken() {
   try {
@@ -1548,7 +1551,6 @@ async function refreshAdminToken() {
 function v(id){return document.getElementById(id).value.trim();}
 function enc(s){return encodeURIComponent(s);}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-let _tt;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3000);}
 
 
