@@ -546,10 +546,9 @@ tr:hover td{background:rgba(0,229,255,0.015);}
 </div>
 <div class="toast" id="toast"></div>
 
-<!-- Socket.IO + MediaSoup client -->
-<script src="/socket.io/socket.io.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mediasoup-client@3/dist/mediasoup-client.min.js"></script>
-<script src="/ms-client.js"></script>
+<!-- LiveKit client -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="/lk-client.js"></script>
 <script>
 const API      = location.origin;
 const ADMIN_U  = 'angry', ADMIN_P = 'angry0306';
@@ -641,8 +640,8 @@ function showDashboard() {
   document.getElementById('d-room').textContent      = S.roomName;
   updateBooyahUrl();
 
-  // Connect mediasoup
-  connectMediaSoup();
+  // Connect LiveKit
+  connectLiveKit();
 
   // Load assets
   Promise.all([fetchServerLogos(), fetchPlayerPhotos()]).then(() => {
@@ -656,8 +655,8 @@ function logout() {
   onlinePlayers.clear();
   audioAnalysers.forEach(a => { cancelAnimationFrame(a.animId); try{a.ctx.close();}catch{} });
   audioAnalysers.clear();
-  msClient.destroy();
-  window.msClient = new MSClient();
+  lkClient.destroy();
+  window.lkClient = new LKClient();
   S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
   document.getElementById('vd').classList.remove('active');
   document.getElementById('vl').classList.add('active');
@@ -668,77 +667,89 @@ function logout() {
   toast('Logged out');
 }
 
-// ── MediaSoup connection ──────────────────────────────────────────────────────
-async function connectMediaSoup() {
+// ── LiveKit connection ────────────────────────────────────────────────────────
+async function connectLiveKit() {
   try {
-    await msClient.connect();
+    // Get admin token from server
+    const res  = await fetch('/api/admin/session', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username: S._user, password: S._pass })
+    });
+    const data = await res.json();
+    if (!res.ok) { toast('Session error'); return; }
 
-    // Listen for new player streams
-    await msClient.startReceiving('admin',
-      // onStream — new camera feed arrived
+    // Connect LiveKit WS for server notifications
+    lkClient.connectWS('admin');
+
+    // Connect to LiveKit room as subscriber
+    await lkClient.connectAdmin(
+      data.token,
+      data.livekitUrl,
+      // onStream — new camera arrived
       function(uid, stream, playerName, team) {
-        console.log('[ADMIN] Stream arrived:', uid, playerName);
-        // Find camera in list
+        console.log('[ADMIN] Stream:', uid, playerName);
         const cam = S.cameras.find(c => c.uid === uid);
-        if (cam) {
-          playerCameOnline(uid, cam.playerName, cam.slot, cam.team);
-        } else {
-          playerCameOnline(uid, playerName || uid, null, team || '');
-        }
-        // Store stream in peerConns for legacy renderFeeds compatibility
+        const pName = cam ? cam.playerName : (playerName || uid);
+        const pTeam = cam ? cam.team : (team || '');
+        const pSlot = cam ? cam.slot : null;
+        playerCameOnline(uid, pName, pSlot, pTeam);
         peerConns.set(uid, { stream });
-        // Attach stream to feed card video element
         const vid = document.getElementById('vid-' + uid);
-        if (vid) {
-          vid.srcObject = stream;
-          const w = document.getElementById('wait-'+uid);
-          if(w) w.style.display = 'none';
-        }
+        if (vid) { vid.srcObject = stream; }
+        const w = document.getElementById('wait-' + uid);
+        if (w) w.style.display = 'none';
         updateFeedStatus(uid, 'live');
         startAudioMeter(uid, stream);
         renderFeeds();
-        // Update cameras list with live status
-        const existing = S.cameras.find(c => c.uid === uid);
-        if (!existing) {
-          S.cameras.push({ uid, playerName: playerName||uid, team: team||'', slot: null });
+        if (!S.cameras.find(c => c.uid === uid)) {
+          S.cameras.push({ uid, playerName: pName, team: pTeam, slot: pSlot });
           renderCameras(); renderTeams(); updateSelects();
           document.getElementById('d-reg').textContent = S.cameras.length;
         }
       },
       // onLeft — camera disconnected
       function(uid) {
-        console.log('[ADMIN] Player left:', uid);
+        console.log('[ADMIN] Left:', uid);
         playerWentOffline(uid);
       }
     );
 
-    // Listen for force-disconnect event
-    window.addEventListener('force-disconnect', () => {
-      toast('⚠️ Force disconnect received');
+    // Listen for server WS notifications
+    window.addEventListener('lk-notify', function(e) {
+      const msg = e.detail;
+      if (msg.type === 'player-joined') {
+        const cam = S.cameras.find(c => c.uid === msg.uid);
+        if (cam) playerCameOnline(msg.uid, cam.playerName, cam.slot, cam.team);
+      }
+      if (msg.type === 'player-left') playerWentOffline(msg.uid);
+      if (msg.type === 'spect-update') handleSpectAutoUpdate(msg);
+      if (msg.type === 'booyah-detected') {
+        document.getElementById('booyah-badge').className = 'live-badge';
+        document.getElementById('booyah-badge').innerHTML = '<span class="d"></span>BOOYAH';
+      }
     });
 
-    // Update online count periodically
+    // Online count updater
     setInterval(async () => {
       try {
-        const res  = await fetch('/api/players/live');
-        const data = await res.json();
-        document.getElementById('d-online').textContent = (data.players||[]).length;
+        const r = await fetch('/api/players/live');
+        const d = await r.json();
+        document.getElementById('d-online').textContent = (d.players||[]).length;
       } catch {}
     }, 5000);
 
     toast('📡 Watching for players…');
-    console.log('[ADMIN] MediaSoup connected');
   } catch(e) {
-    console.error('[ADMIN] MediaSoup connect error:', e);
+    console.error('[ADMIN] LiveKit error:', e);
     toast('Connection error — retrying…');
-    setTimeout(connectMediaSoup, 5000);
+    setTimeout(connectLiveKit, 5000);
   }
 }
 
 // ── Disconnect player (admin action) ─────────────────────────────────────────
 function disconnectPlayer(uid) {
   if (!confirm('Stop camera for player ' + uid + '?')) return;
-  msClient.disconnectPlayer(uid);
+  lkClient.disconnectPlayer(uid);
   playerWentOffline(uid);
   toast('Camera stopped for: ' + uid);
 }
@@ -881,12 +892,12 @@ function renderFeeds(){
           </div>`;
       }
       grid.appendChild(card);
-      // re-attach stream from mediasoup if exists
-      const msStream = msClient.getStream(uid);
-      if(msStream){
+      // re-attach stream from LiveKit if exists
+      const lkStream = lkClient.getStream(uid) || (peerConns.get(uid)||{}).stream;
+      if(lkStream){
         const vid=document.getElementById('vid-'+uid);
         if(vid&&!vid.srcObject){
-          vid.srcObject=msStream;
+          vid.srcObject=lkStream;
           const w=document.getElementById('wait-'+uid);if(w)w.style.display='none';
         }
       }
@@ -1446,14 +1457,14 @@ async function testBooyah() {
   // Send a fake booyah event for testing with first 4 registered players
   var testPlayers = S.cameras.slice(0,4).map(function(c){ return { uid:c.uid, playerName:c.playerName }; });
   var teamName    = testPlayers.length && S.cameras[0].team ? S.cameras[0].team : 'TEST TEAM';
-  msClient.booyahDetected(teamName);
+  fetch('/api/booyah/trigger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({teamName})}).catch(()=>{});
   document.getElementById('booyah-badge').className='live-badge';
   document.getElementById('booyah-badge').innerHTML='<span class="d"></span>BOOYAH LIVE';
   toast('⚡ Test booyah sent!');
 }
 
 async function resetBooyah() {
-  msClient.booyahReset();
+  fetch('/api/booyah/reset',{method:'POST'}).catch(()=>{});
   document.getElementById('booyah-badge').className='offline-badge';
   document.getElementById('booyah-badge').textContent='WAITING';
   toast('Booyah reset');
