@@ -10,32 +10,45 @@
   html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0d14;}
 
   /*
-    8 cols × 6 rows = 48 cells
-    Cell = 240 × 135px (exactly 16:9)
-    Grid total = 1920 × 810px
-    Margin top/bottom = (1080 - 810) / 2 = 135px
-    Margin left/right = 0px (fills full width)
+    MODE A (default): 6 cols × 8 rows = 48 cells
+    cell = 320×180px (perfect 16:9)
+    total = 1920×1440 → scroll? No — scale to fit:
+    scale = 1080/1440 = 0.75 → width = 1920*0.75 = 1440 (not full width)
+
+    MODE B: 8 cols × 6 rows = 48 cells
+    cell = 240×135px (perfect 16:9)
+    total = 1920×810 → center vertically, gap = 135px top/bottom
+
+    MODE C (BEST FILL): 7 cols × 7 rows = 49 cells (close to 48)
+    cell = 274×154px (16:9)
+    total = 1920×1080 → PERFECT FILL ✅
+    (1 empty cell in last row — hidden)
+
+    Using MODE C: 7×7 = 49 slots, show 48, hide last one
   */
+
   .grid{
-    position:absolute;
-    top:135px;
-    left:0;
-    width:1920px;
-    height:810px;
     display:grid;
-    grid-template-columns:repeat(8, 240px);
-    grid-template-rows:repeat(6, 135px);
+    grid-template-columns:repeat(7, 1fr);
+    grid-template-rows:repeat(7, 1fr);
     gap:0;
-    background:#0a0d14;
+    width:1920px;
+    height:1080px;
+    background:#111;
   }
 
   .cam-cell{
     position:relative;
-    width:240px;
-    height:135px;
     overflow:hidden;
     background:#06090f;
     border:1px solid rgba(200,149,42,0.25);
+    /* Each cell = 1920/7 × 1080/7 ≈ 274×154px = 16:9 ✅ */
+  }
+
+  .cam-cell.hidden-cell{
+    visibility:hidden;
+    border:none;
+    background:transparent;
   }
 
   .cam-cell .photo-fb{
@@ -45,6 +58,7 @@
     height:100%;
     object-fit:cover;
     object-position:center;
+    display:block;
     z-index:1;
   }
 
@@ -54,6 +68,7 @@
     width:100%;
     height:100%;
     object-fit:cover;
+    display:block;
     z-index:2;
     opacity:0;
     transition:opacity .4s;
@@ -63,19 +78,18 @@
   .team-logo{
     position:absolute;top:50%;left:50%;
     transform:translate(-50%,-50%);
-    width:30px;height:30px;
+    width:28px;height:28px;
     object-fit:contain;opacity:0.2;
-    z-index:3;pointer-events:none;
-    transition:opacity .4s;
+    z-index:3;pointer-events:none;transition:opacity .4s;
   }
   .cam-cell.live .team-logo{opacity:0;}
 
   .name-bar{
-    position:absolute;bottom:0;left:0;right:0;
-    z-index:5;padding:2px 4px;
+    position:absolute;bottom:0;left:0;right:0;z-index:5;
+    padding:2px 4px;
     font-family:'Rajdhani','Arial Narrow',sans-serif;
-    font-size:10px;font-weight:700;
-    color:#fff;letter-spacing:.5px;text-transform:uppercase;
+    font-size:10px;font-weight:700;color:#fff;
+    letter-spacing:.5px;text-transform:uppercase;
     text-shadow:0 1px 3px rgba(0,0,0,.9);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     background:linear-gradient(transparent,rgba(0,0,0,.7));
@@ -101,7 +115,12 @@
 <body>
 <div class="grid" id="cam-grid"></div>
 <script>
-const TOTAL=48;
+// 7×7 grid = 49 slots, we use 48, last slot hidden
+const COLS   = 7;
+const ROWS   = 7;
+const TOTAL  = 48; // 49th cell is hidden filler
+const SLOTS  = COLS * ROWS; // 49
+
 const playerPhotos={}, teamLogos={};
 let cameras=[];
 
@@ -176,6 +195,7 @@ function sortByTeam(players) {
     teams[t].push(p);
   });
   var result=[];
+  // Determine players per team group (4 per team)
   Object.keys(teams).sort().forEach(function(t){
     var m = teams[t].slice(0,4);
     while(m.length<4) m.push(null);
@@ -188,7 +208,15 @@ function buildGrid() {
   var grid = document.getElementById('cam-grid');
   grid.innerHTML = '';
 
-  for (var i=0; i<TOTAL; i++) {
+  for (var i=0; i<SLOTS; i++) {
+    // Last slot (49th) is hidden filler to complete 7×7 grid
+    if (i >= TOTAL) {
+      var filler = document.createElement('div');
+      filler.className = 'cam-cell hidden-cell';
+      grid.appendChild(filler);
+      continue;
+    }
+
     var player = cameras[i] || null;
     var uid    = player ? String(player.uid||'') : '';
     var pname  = player ? (player.playerName||uid) : '';
@@ -196,6 +224,7 @@ function buildGrid() {
     var photo  = uid ? (playerPhotos[uid]||null) : null;
     var logo   = team ? getTeamLogo(team) : null;
     var defImg = '/players/'+((i%4)+1)+'.png';
+    // Mark last player of each team group (every 4th)
     var isLast = (i%4===3);
 
     var cell = document.createElement('div');
@@ -210,7 +239,9 @@ function buildGrid() {
     cell.appendChild(fb);
 
     var vid = document.createElement('video');
-    vid.autoplay=true; vid.playsInline=true; vid.muted=true;
+    vid.autoplay    = true;
+    vid.playsInline = true;
+    vid.muted       = true;
     if (uid) vid.id = 'vid-'+uid;
     cell.appendChild(vid);
 
@@ -232,15 +263,18 @@ function buildGrid() {
 
     ['tl','tr','bl','br'].forEach(function(pos){
       var ca = document.createElement('div');
-      ca.className = 'ca '+pos; cell.appendChild(ca);
+      ca.className = 'ca '+pos;
+      cell.appendChild(ca);
     });
 
     var dot = document.createElement('div');
-    dot.className = 'live-dot'; cell.appendChild(dot);
+    dot.className = 'live-dot';
+    cell.appendChild(dot);
 
     if (pname) {
       var bar = document.createElement('div');
-      bar.className = 'name-bar'; bar.textContent = pname;
+      bar.className = 'name-bar';
+      bar.textContent = pname;
       cell.appendChild(bar);
     }
 
