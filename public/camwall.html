@@ -9,26 +9,41 @@
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0d14;}
 
-  /* 12 cols × 4 rows — each cell naturally 160×270px in the grid */
-  /* We make video 16:9 = 160×90px centered — letterboxed in cell */
-  .grid{
-    display:grid;
-    grid-template-columns:repeat(12,1fr);
-    grid-template-rows:repeat(4,1fr);
-    gap:2px;
+  /*
+    12 cols × 4 rows = 48 cells
+    Each cell = 160px wide × 90px tall (exactly 16:9)
+    Total grid = 1920 × 360px
+    Centered vertically → top: 360px
+  */
+  .grid-wrap{
+    position:absolute;
+    left:0;
+    top:360px; /* (1080 - 360) / 2 = 360 */
     width:1920px;
-    height:1080px;
+    height:360px;
     background:#111;
   }
 
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12,160px);
+    grid-template-rows:repeat(4,90px);
+    gap:0;
+    width:1920px;
+    height:360px;
+  }
+
+  /* Each cell is exactly 160×90 = 16:9 */
   .cam-cell{
     position:relative;
+    width:160px;
+    height:90px;
     overflow:hidden;
     background:#06090f;
     border:1px solid rgba(200,149,42,0.25);
   }
 
-  /* Photo fallback — fills cell, cropped to center */
+  /* Photo fallback fills entire 16:9 cell */
   .cam-cell .photo-fb{
     position:absolute;
     inset:0;
@@ -40,17 +55,12 @@
     z-index:1;
   }
 
-  /* Video — 16:9 centered in cell, letterboxed top/bottom if cell is taller */
+  /* Video fills entire 16:9 cell exactly */
   .cam-cell video{
     position:absolute;
-    /* Center both axes */
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    /* Force 16:9 — width fills cell, height = width*9/16 */
+    inset:0;
     width:100%;
-    height:auto;
-    aspect-ratio:16/9;
+    height:100%;
     object-fit:cover;
     display:block;
     z-index:2;
@@ -62,42 +72,44 @@
   .team-logo{
     position:absolute;top:50%;left:50%;
     transform:translate(-50%,-50%);
-    width:28px;height:28px;
-    object-fit:contain;opacity:0.25;
+    width:24px;height:24px;
+    object-fit:contain;opacity:0.2;
     z-index:3;pointer-events:none;transition:opacity .4s;
   }
   .cam-cell.live .team-logo{opacity:0;}
 
   .name-bar{
     position:absolute;bottom:0;left:0;right:0;z-index:5;
-    padding:2px 4px;
+    padding:1px 3px;
     font-family:'Rajdhani','Arial Narrow',sans-serif;
-    font-size:9px;font-weight:700;color:#fff;
+    font-size:8px;font-weight:700;color:#fff;
     letter-spacing:.5px;text-transform:uppercase;
     text-shadow:0 1px 3px rgba(0,0,0,.9);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    background:linear-gradient(transparent,rgba(0,0,0,.65));
+    background:linear-gradient(transparent,rgba(0,0,0,.7));
   }
 
   .live-dot{
     position:absolute;top:2px;right:2px;
-    width:5px;height:5px;border-radius:50%;
+    width:4px;height:4px;border-radius:50%;
     background:#00ff88;opacity:0;z-index:5;
-    box-shadow:0 0 4px #00ff88;transition:opacity .3s;
+    box-shadow:0 0 3px #00ff88;transition:opacity .3s;
   }
   .cam-cell.live .live-dot{opacity:1;animation:ldp 1.5s infinite;}
   @keyframes ldp{0%,100%{opacity:1}50%{opacity:.3}}
 
-  .ca{position:absolute;width:5px;height:5px;z-index:6;pointer-events:none;}
-  .ca.tl{top:1px;left:1px;border-top:1px solid rgba(200,149,42,.5);border-left:1px solid rgba(200,149,42,.5);}
-  .ca.tr{top:1px;right:1px;border-top:1px solid rgba(200,149,42,.5);border-right:1px solid rgba(200,149,42,.5);}
-  .ca.bl{bottom:1px;left:1px;border-bottom:1px solid rgba(200,149,42,.5);border-left:1px solid rgba(200,149,42,.5);}
-  .ca.br{bottom:1px;right:1px;border-bottom:1px solid rgba(200,149,42,.5);border-right:1px solid rgba(200,149,42,.5);}
+  .ca{position:absolute;width:4px;height:4px;z-index:6;pointer-events:none;}
+  .ca.tl{top:0;left:0;border-top:1px solid rgba(200,149,42,.5);border-left:1px solid rgba(200,149,42,.5);}
+  .ca.tr{top:0;right:0;border-top:1px solid rgba(200,149,42,.5);border-right:1px solid rgba(200,149,42,.5);}
+  .ca.bl{bottom:0;left:0;border-bottom:1px solid rgba(200,149,42,.5);border-left:1px solid rgba(200,149,42,.5);}
+  .ca.br{bottom:0;right:0;border-bottom:1px solid rgba(200,149,42,.5);border-right:1px solid rgba(200,149,42,.5);}
   .cam-cell.team-last{border-right:2px solid rgba(200,149,42,.6);}
 </style>
 </head>
 <body>
-<div class="grid" id="cam-grid"></div>
+<div class="grid-wrap">
+  <div class="grid" id="cam-grid"></div>
+</div>
 <script>
 const TOTAL=48;
 const playerPhotos={}, teamLogos={};
@@ -121,7 +133,6 @@ let cameras=[];
 
   await lkClient.subscribeAll('camwall', null,
     function(uid, stream, playerName, team) {
-      // Add to cameras if new
       var exists = cameras.find(function(c){ return c && c.uid===uid; });
       if (!exists) {
         cameras.push({ uid, playerName: playerName||uid, team: team||'' });
@@ -138,7 +149,6 @@ let cameras=[];
     }
   );
 
-  // Server WS notifications
   window.addEventListener('lk-notify', function(e) {
     var msg = e.detail;
     if (msg.type === 'player-joined') {
@@ -187,16 +197,15 @@ function sortByTeam(players) {
 function buildGrid() {
   var grid = document.getElementById('cam-grid');
   grid.innerHTML = '';
-
   for (var i=0; i<TOTAL; i++) {
-    var player  = cameras[i] || null;
-    var uid     = player ? String(player.uid||'') : '';
-    var pname   = player ? (player.playerName||uid) : '';
-    var team    = player ? (player.team||'') : '';
-    var photo   = uid ? (playerPhotos[uid]||null) : null;
-    var logo    = team ? getTeamLogo(team) : null;
-    var defImg  = '/players/'+((i%4)+1)+'.png';
-    var isLast  = (i%4===3);
+    var player = cameras[i] || null;
+    var uid    = player ? String(player.uid||'') : '';
+    var pname  = player ? (player.playerName||uid) : '';
+    var team   = player ? (player.team||'') : '';
+    var photo  = uid ? (playerPhotos[uid]||null) : null;
+    var logo   = team ? getTeamLogo(team) : null;
+    var defImg = '/players/'+((i%4)+1)+'.png';
+    var isLast = (i%4===3);
 
     var cell = document.createElement('div');
     cell.className = 'cam-cell' + (isLast ? ' team-last' : '');
@@ -210,11 +219,11 @@ function buildGrid() {
     fb.onerror = function(){ this.onerror=null; this.src=defImg; };
     cell.appendChild(fb);
 
-    // Video (16:9)
+    // Video — fills 16:9 cell exactly
     var vid = document.createElement('video');
-    vid.autoplay   = true;
+    vid.autoplay    = true;
     vid.playsInline = true;
-    vid.muted      = true;
+    vid.muted       = true;
     if (uid) vid.id = 'vid-'+uid;
     cell.appendChild(vid);
 
@@ -229,18 +238,17 @@ function buildGrid() {
       }
     }
 
-    // Team logo watermark
+    // Team logo
     if (logo) {
       var li = document.createElement('img');
-      li.className = 'team-logo';
-      li.src = logo;
+      li.className = 'team-logo'; li.src = logo;
       cell.appendChild(li);
     }
 
-    // Corner accents
-    ['tl','tr','bl','br'].forEach(function(pos){
+    // Corners
+    ['tl','tr','bl','br'].forEach(function(p2){
       var ca = document.createElement('div');
-      ca.className = 'ca '+pos;
+      ca.className = 'ca '+p2;
       cell.appendChild(ca);
     });
 
@@ -249,7 +257,7 @@ function buildGrid() {
     dot.className = 'live-dot';
     cell.appendChild(dot);
 
-    // Name bar
+    // Name
     if (pname) {
       var bar = document.createElement('div');
       bar.className = 'name-bar';
