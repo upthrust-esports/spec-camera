@@ -320,9 +320,10 @@ app.post('/api/booyah/reset', (req, res) => {
 });
 
 // ── Page routes ───────────────────────────────────────────────────────────────
-app.get('/booyah',   (req, res) => res.sendFile(path.join(__dirname, 'public', 'booyah-cam.html')));
-app.get('/camwall',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'camwall.html')));
-app.get('/spect:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'obs-spect.html')));
+app.get('/booyah',      (req, res) => res.sendFile(path.join(__dirname, 'public', 'booyah-cam.html')));
+app.get('/camwall',     (req, res) => res.sendFile(path.join(__dirname, 'public', 'camwall.html')));
+app.get('/spect:id',    (req, res) => res.sendFile(path.join(__dirname, 'public', 'obs-spect.html')));
+app.get('/league-ops',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'league-ops.html')));
 
 // ── WebSocket (for real-time notifications to browser) ────────────────────────
 const wss = new WebSocketServer({ server: httpServer });

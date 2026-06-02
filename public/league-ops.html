@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>League Ops — Upthrust Esports</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="/lk-client.js"></script>
+<style>
+:root{
+  --bg:#080c10;--surface:#0e1520;--card:#111b28;--border:#1e2f45;
+  --accent:#00e5ff;--accent2:#ff6b35;--green:#00ff88;--red:#ff3b5c;
+  --yellow:#ffd166;--text:#e0eaf5;--muted:#5a7a9a;
+  --glow:0 0 18px rgba(0,229,255,0.2);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+
+/* ── Header ── */
+header{position:relative;z-index:10;display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--border);background:rgba(8,12,16,0.95);backdrop-filter:blur(10px);}
+.logo{width:28px;height:28px;border:2px solid var(--accent);display:grid;place-items:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10px;color:var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:rgba(0,229,255,0.07);}
+header h1{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;}
+header h1 span{color:var(--accent);}
+.hright{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.hlink{font-size:9px;color:var(--muted);text-decoration:none;padding:3px 9px;border:1px solid var(--border);border-radius:3px;letter-spacing:1px;font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;}
+.hlink:hover{color:var(--accent);border-color:var(--accent);}
+
+/* ── Main ── */
+.main{position:relative;z-index:1;padding:20px 24px;max-width:1600px;margin:0 auto;}
+
+/* ── Team selector bar ── */
+.selector-bar{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:14px 18px;margin-bottom:20px;
+}
+.selector-bar label{font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+.team-select{
+  background:var(--card);border:1px solid var(--border);border-radius:4px;
+  padding:8px 12px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;
+  outline:none;cursor:pointer;min-width:220px;transition:border-color .2s;
+}
+.team-select:focus{border-color:var(--accent);}
+.team-select option{background:var(--surface);}
+.team-logo-preview{width:32px;height:32px;border-radius:4px;object-fit:contain;border:1px solid var(--border);background:rgba(0,0,0,0.2);}
+.team-badge{
+  padding:4px 10px;border-radius:3px;font-family:'Rajdhani',sans-serif;
+  font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  background:rgba(0,229,255,0.08);color:var(--accent);border:1px solid rgba(0,229,255,0.2);
+}
+.conn-pill{
+  margin-left:auto;display:flex;align-items:center;gap:6px;
+  font-family:'Share Tech Mono',monospace;font-size:9px;
+  padding:4px 10px;border-radius:2px;border:1px solid;
+}
+.conn-pill.connected{color:var(--green);border-color:rgba(0,255,136,0.3);background:rgba(0,255,136,0.06);}
+.conn-pill.connecting{color:var(--yellow);border-color:rgba(255,209,102,0.3);background:rgba(255,209,102,0.06);}
+.conn-pill.idle{color:var(--muted);border-color:var(--border);background:transparent;}
+.conn-pill .dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:bl 1.5s infinite;flex-shrink:0;}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Feeds grid — max 5 cards ── */
+.feeds-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(380px,1fr));
+  gap:14px;
+}
+
+/* ── Feed card ── */
+.feed-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;overflow:hidden;transition:border-color .2s;
+}
+.feed-card:hover{border-color:rgba(0,229,255,0.3);}
+.feed-card.live{border-color:rgba(0,255,136,0.35);}
+
+.feed-header{
+  padding:8px 12px;background:rgba(0,0,0,0.3);
+  display:flex;align-items:center;gap:8px;
+}
+.feed-avatar{
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(0,229,255,0.08);border:1px solid var(--border);
+  display:grid;place-items:center;font-size:12px;flex-shrink:0;
+}
+.feed-info{flex:1;min-width:0;}
+.feed-name{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.feed-uid{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);}
+.feed-status{flex-shrink:0;}
+.live-badge{
+  background:rgba(0,255,136,0.1);color:var(--green);
+  border:1px solid rgba(0,255,136,0.2);padding:2px 7px;
+  border-radius:2px;font-family:'Share Tech Mono',monospace;
+  font-size:8px;display:inline-flex;align-items:center;gap:3px;
+}
+.live-badge .d{width:4px;height:4px;border-radius:50%;background:currentColor;animation:bl 1.2s infinite;}
+.offline-badge{
+  background:rgba(90,122,154,0.08);color:var(--muted);
+  border:1px solid var(--border);padding:2px 7px;border-radius:2px;
+  font-family:'Share Tech Mono',monospace;font-size:8px;
+}
+
+.feed-video-wrap{
+  background:#000;position:relative;
+  aspect-ratio:16/9;overflow:hidden;
+}
+.feed-video-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+.feed-waiting{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;background:#000;
+}
+.feed-waiting img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.5;}
+.feed-waiting .icon{font-size:24px;opacity:.3;position:relative;z-index:1;}
+.feed-waiting p{font-size:10px;color:var(--muted);position:relative;z-index:1;}
+
+.feed-footer{padding:6px 12px;display:flex;align-items:center;justify-content:space-between;}
+.audio-wrap{display:flex;align-items:center;gap:4px;}
+.audio-label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);}
+.audio-bars{display:flex;align-items:flex-end;gap:2px;height:12px;}
+.audio-bar{width:3px;background:var(--border);border-radius:1px;transition:height .08s,background .08s;}
+
+/* ── Empty state ── */
+.empty-state{
+  text-align:center;padding:60px 20px;color:var(--muted);
+  grid-column:1/-1;
+}
+.empty-state .icon{font-size:40px;opacity:.3;margin-bottom:10px;}
+.empty-state p{font-size:13px;line-height:1.6;}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--accent);border-radius:4px;padding:8px 13px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);z-index:9999;transform:translateY(50px);opacity:0;transition:all .3s;}
+.toast.show{transform:translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">UP</div>
+  <h1><span>League</span> Ops — Camera Monitor</h1>
+  <div class="hright">
+    <a href="/admin.html" class="hlink">⚙ Admin</a>
+    <a href="/index.html" class="hlink">🎮 Player</a>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Team Selector -->
+  <div class="selector-bar">
+    <label>Select Team</label>
+    <img id="team-logo-preview" class="team-logo-preview" src="" style="display:none"/>
+    <select id="team-select" class="team-select" onchange="onTeamChange()">
+      <option value="">— Loading teams... —</option>
+    </select>
+    <span id="team-badge" class="team-badge" style="display:none">0 players</span>
+    <div class="conn-pill idle" id="conn-pill">
+      <span class="dot"></span><span id="conn-text">IDLE</span>
+    </div>
+  </div>
+
+  <!-- Feeds -->
+  <div class="feeds-grid" id="feeds-grid">
+    <div class="empty-state">
+      <div class="icon">📡</div>
+      <p>Select a team above to monitor their cameras.</p>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var _tt;
+var allCameras    = [];   // full list from server
+var teamLogos     = {};
+var playerPhotos  = {};
+var onlinePlayers = new Set();
+var audioAnalysers = new Map();
+var currentTeam   = '';
+var lkRoom        = null;
+var notifyWs      = null;
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async function boot(){
+  try {
+    var [cr, lr, pr] = await Promise.all([
+      fetch('/api/room/cameras'),
+      fetch('/api/logos'),
+      fetch('/api/players/photos'),
+    ]);
+    var cd = await cr.json();
+    var ld = await lr.json();
+    var pd = await pr.json();
+    if (cd.cameras) allCameras = cd.cameras;
+    if (ld.logos)   Object.assign(teamLogos, ld.logos);
+    if (pd.photos)  Object.assign(playerPhotos, pd.photos);
+  } catch(e){ console.warn('Boot fetch:', e); }
+
+  // Also load live players
+  try {
+    var lr2  = await fetch('/api/players/live');
+    var ld2  = await lr2.json();
+    (ld2.players||[]).forEach(function(p){ onlinePlayers.add(p.uid); });
+  } catch {}
+
+  populateTeamDropdown();
+  connectNotifyWS();
+  connectLiveKit();
+})();
+
+// ── Populate team dropdown ────────────────────────────────────────────────────
+function populateTeamDropdown() {
+  var teams = [...new Set(allCameras.map(function(c){ return c.team; }).filter(Boolean))].sort();
+  var sel   = document.getElementById('team-select');
+  sel.innerHTML = '<option value="">— Select a team —</option>';
+  teams.forEach(function(t){
+    var opt   = document.createElement('option');
+    opt.value = t;
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+  if (!teams.length) {
+    sel.innerHTML = '<option value="">— No teams registered —</option>';
+  }
+}
+
+// ── Team changed ──────────────────────────────────────────────────────────────
+function onTeamChange() {
+  var sel  = document.getElementById('team-select');
+  currentTeam = sel.value;
+
+  // Update logo preview
+  var logo = currentTeam ? getTeamLogo(currentTeam) : null;
+  var prev = document.getElementById('team-logo-preview');
+  if (logo) { prev.src = logo; prev.style.display = 'block'; }
+  else       { prev.style.display = 'none'; }
+
+  // Update badge
+  var players = getTeamPlayers(currentTeam);
+  var badge   = document.getElementById('team-badge');
+  if (currentTeam) {
+    badge.textContent = players.length + ' player' + (players.length !== 1 ? 's' : '');
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  renderFeeds();
+}
+
+// ── Render feed cards for selected team ───────────────────────────────────────
+function renderFeeds() {
+  var grid    = document.getElementById('feeds-grid');
+  var players = getTeamPlayers(currentTeam);
+
+  if (!currentTeam || !players.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">📡</div><p>' +
+      (currentTeam ? 'No players registered for this team.' : 'Select a team above to monitor their cameras.') +
+      '</p></div>';
+    return;
+  }
+
+  grid.innerHTML = '';
+  players.slice(0, 5).forEach(function(player) {
+    var uid    = String(player.uid || '');
+    var pname  = player.playerName || uid;
+    var isLive = onlinePlayers.has(uid);
+    var photo  = playerPhotos[uid] || null;
+
+    var card  = document.createElement('div');
+    card.className = 'feed-card' + (isLive ? ' live' : '');
+    card.id = 'card-' + uid;
+
+    var statusHtml = isLive
+      ? '<span class="live-badge"><span class="d"></span>LIVE</span>'
+      : '<span class="offline-badge">WAITING</span>';
+
+    card.innerHTML =
+      '<div class="feed-header">' +
+        '<div class="feed-avatar">🎮</div>' +
+        '<div class="feed-info">' +
+          '<div class="feed-name">' + esc(pname) + '</div>' +
+          '<div class="feed-uid">' + esc(uid) + '</div>' +
+        '</div>' +
+        '<div class="feed-status" id="fstat-' + uid + '">' + statusHtml + '</div>' +
+      '</div>' +
+      '<div class="feed-video-wrap">' +
+        '<video id="vid-' + uid + '" autoplay playsinline></video>' +
+        '<div class="feed-waiting" id="wait-' + uid + '" style="' + (isLive ? 'display:none' : '') + '">' +
+          (photo ? '<img src="' + photo + '">' : '') +
+          '<div class="icon">📡</div>' +
+          '<p>Waiting for camera...</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="feed-footer">' +
+        '<span style="font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--muted)">S' + (player.slot||'?') + '</span>' +
+        '<div class="audio-wrap">' +
+          '<span class="audio-label">MIC</span>' +
+          '<div class="audio-bars">' +
+            [0,1,2,3,4,5,6,7].map(function(i){ return '<div class="audio-bar" id="ab' + i + '-' + uid + '" style="height:2px"></div>'; }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    grid.appendChild(card);
+
+    // Attach existing stream if already live
+    if (lkClient.getStream(uid)) {
+      attachStreamToCard(uid, lkClient.getStream(uid));
+    }
+  });
+}
+
+// ── Connect LiveKit ───────────────────────────────────────────────────────────
+async function connectLiveKit() {
+  setConnPill('connecting', 'CONNECTING...');
+  try {
+    var res  = await fetch('/api/viewer-token', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ viewerType:'league-ops', spectId:null })
+    });
+    var data = await res.json();
+    if (!res.ok) { setConnPill('idle','ERROR'); return; }
+
+    await lkClient.subscribeAll('league-ops', null,
+      function(uid, stream, playerName, team) {
+        onlinePlayers.add(uid);
+        console.log('[OPS] Stream arrived:', uid, playerName, team);
+
+        // Update camera list if new player
+        var exists = allCameras.find(function(c){ return c.uid === uid; });
+        if (!exists) {
+          allCameras.push({ uid, playerName: playerName||uid, team: team||'' });
+          populateTeamDropdown();
+        }
+
+        // Update status badge if this player is in current team view
+        updateCardStatus(uid, true);
+        attachStreamToCard(uid, stream);
+        startAudioMeter(uid, stream);
+        renderFeeds(); // re-render to show live state
+      },
+      function(uid) {
+        onlinePlayers.delete(uid);
+        stopAudioMeter(uid);
+        updateCardStatus(uid, false);
+        var vid  = document.getElementById('vid-' + uid);
+        var wait = document.getElementById('wait-' + uid);
+        if (vid) vid.srcObject = null;
+        if (wait) wait.style.display = 'flex';
+        var card = document.getElementById('card-' + uid);
+        if (card) card.classList.remove('live');
+      }
+    );
+
+    setConnPill('connected', 'WATCHING');
+    toast('📡 Watching all cameras');
+  } catch(e) {
+    console.error('[OPS] LiveKit error:', e);
+    setConnPill('idle', 'ERROR');
+    setTimeout(connectLiveKit, 5000);
+  }
+}
+
+// ── Attach stream to card ─────────────────────────────────────────────────────
+function attachStreamToCard(uid, stream) {
+  var vid  = document.getElementById('vid-' + uid);
+  var wait = document.getElementById('wait-' + uid);
+  var card = document.getElementById('card-' + uid);
+  if (vid && stream) {
+    vid.srcObject = stream;
+    vid.play().catch(function(){});
+    if (wait) wait.style.display = 'none';
+    if (card) card.classList.add('live');
+  }
+}
+
+// ── Update card live status ───────────────────────────────────────────────────
+function updateCardStatus(uid, isLive) {
+  var el = document.getElementById('fstat-' + uid);
+  if (!el) return;
+  el.innerHTML = isLive
+    ? '<span class="live-badge"><span class="d"></span>LIVE</span>'
+    : '<span class="offline-badge">WAITING</span>';
+}
+
+// ── Audio meter ───────────────────────────────────────────────────────────────
+function startAudioMeter(uid, stream) {
+  try {
+    var ctx = new (window.AudioContext||window.webkitAudioContext)();
+    var src = ctx.createMediaStreamSource(stream);
+    var an  = ctx.createAnalyser(); an.fftSize=256; an.smoothingTimeConstant=0.6;
+    src.connect(an);
+    var data  = new Uint8Array(an.frequencyBinCount);
+    var chunk = Math.floor(data.length/8);
+    function draw(){
+      an.getByteFrequencyData(data);
+      for(var i=0;i<8;i++){
+        var s=0; for(var j=0;j<chunk;j++) s+=data[i*chunk+j];
+        var pct=(s/chunk)/255, h=Math.max(2,Math.round(pct*12));
+        var bar=document.getElementById('ab'+i+'-'+uid);
+        if(bar){bar.style.height=h+'px';bar.style.background=pct>.6?'var(--red)':pct>.3?'var(--green)':pct>.05?'var(--accent)':'var(--border)';}
+      }
+      var ref=audioAnalysers.get(uid); if(ref) ref.animId=requestAnimationFrame(draw);
+    }
+    var animId=requestAnimationFrame(draw);
+    audioAnalysers.set(uid,{ctx,analyser:an,animId});
+  } catch(e){ console.warn('AudioMeter:', e); }
+}
+
+function stopAudioMeter(uid) {
+  var a = audioAnalysers.get(uid); if(!a) return;
+  cancelAnimationFrame(a.animId); a.ctx.close(); audioAnalysers.delete(uid);
+  for(var i=0;i<8;i++){var b=document.getElementById('ab'+i+'-'+uid);if(b){b.style.height='2px';b.style.background='var(--border)';}}
+}
+
+// ── Notification WS ───────────────────────────────────────────────────────────
+function connectNotifyWS() {
+  var wsUrl = (location.protocol==='https:'?'wss':'ws')+'://'+location.host;
+  notifyWs  = new WebSocket(wsUrl);
+  notifyWs.onopen = function(){ notifyWs.send(JSON.stringify({type:'register',role:'league-ops'})); };
+  notifyWs.onmessage = function(e) {
+    try {
+      var msg = JSON.parse(e.data);
+      if (msg.type === 'player-joined') {
+        onlinePlayers.add(msg.uid);
+        updateCardStatus(msg.uid, true);
+        var card = document.getElementById('card-' + msg.uid);
+        if (card) card.classList.add('live');
+      }
+      if (msg.type === 'player-left') {
+        onlinePlayers.delete(msg.uid);
+        updateCardStatus(msg.uid, false);
+        var card2 = document.getElementById('card-' + msg.uid);
+        if (card2) card2.classList.remove('live');
+      }
+    } catch {}
+  };
+  notifyWs.onclose = function(){ setTimeout(connectNotifyWS, 2000); };
+  setInterval(function(){ if(notifyWs&&notifyWs.readyState===1) notifyWs.send(JSON.stringify({type:'ping'})); }, 20000);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getTeamPlayers(team) {
+  if (!team) return [];
+  return allCameras.filter(function(c){ return c.team === team; }).slice(0, 5);
+}
+
+function getTeamLogo(name) {
+  if (!name) return null;
+  if (teamLogos[name]) return teamLogos[name];
+  var keys = Object.keys(teamLogos), low = name.toLowerCase().trim();
+  for (var i=0; i<keys.length; i++) if (keys[i].toLowerCase().trim()===low) return teamLogos[keys[i]];
+  return null;
+}
+
+function setConnPill(state, text) {
+  var el = document.getElementById('conn-pill');
+  el.className = 'conn-pill ' + state;
+  document.getElementById('conn-text').textContent = text;
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg){ var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(_tt); _tt=setTimeout(function(){ el.classList.remove('show'); }, 2800); }
+</script>
+</body>
+</html>
