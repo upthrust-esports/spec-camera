@@ -563,9 +563,11 @@ const API      = location.origin;
 const ADMIN_U  = 'angry', ADMIN_P = 'angry0306';
 
 // State
-var ws  = null; // legacy stub
-function ensureCameras(){ if(!Array.isArray(S.cameras)) S.cameras=[]; }
-var _tt = null; // toast timer
+var ws         = null; // legacy stub
+var _tt        = null; // toast timer
+// teamModeSet: teams with single-camera shared feed
+var teamModeSet = new Set(JSON.parse(localStorage.getItem('upthrust_team_mode')||'[]'));
+function saveTeamMode(){ localStorage.setItem('upthrust_team_mode', JSON.stringify([...teamModeSet])); }
 let S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
 
 // Helper to ensure S.cameras is always a valid array
@@ -1136,7 +1138,7 @@ function renderTeams(){
         liveTag+
       '</div>'+
       '<div class="tc-players">'+playersHtml+'</div>'+
-      '<div class="team-mode-toggle" onclick="toggleTeamMode(\''+esc(teamName)+'\')">'+
+      '<div class="team-mode-toggle" onclick="toggleTeamMode(''+esc(teamName)+'')">'+
         '<div class="tmt-switch '+switchOn+'"><div class="knob"></div></div>'+
         '<span class="tmt-label '+labelOn+'">'+modeLabel+'</span>'+
         '<span class="tmt-badge">'+modeBadge+'</span>'+
