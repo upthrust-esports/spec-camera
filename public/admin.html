@@ -134,6 +134,15 @@ header h1 span{color:var(--accent);}
 .tp-uid{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:9px;}
 .tp-live{width:6px;height:6px;border-radius:50%;background:var(--green);animation:bl 1.2s infinite;}
 .tp-offline{width:6px;height:6px;border-radius:50%;background:var(--border);}
+.team-mode-toggle{display:flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(0,0,0,0.2);border-top:1px solid var(--border);cursor:pointer;user-select:none;transition:background .15s;}
+.team-mode-toggle:hover{background:rgba(0,229,255,0.04);}
+.tmt-switch{width:28px;height:14px;border-radius:7px;border:1px solid var(--border);background:var(--bg);position:relative;flex-shrink:0;transition:background .2s,border-color .2s;}
+.tmt-switch .knob{position:absolute;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:var(--muted);transition:transform .2s,background .2s;}
+.tmt-switch.on{background:rgba(0,229,255,0.15);border-color:var(--accent);}
+.tmt-switch.on .knob{transform:translateX(14px);background:var(--accent);}
+.tmt-label{font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+.tmt-label.on{color:var(--accent);}
+.tmt-badge{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--accent2);margin-left:auto;}
 
 /* CAMERAS TAB */
 .cam-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
@@ -555,6 +564,7 @@ const ADMIN_U  = 'angry', ADMIN_P = 'angry0306';
 
 // State
 var ws  = null; // legacy stub
+function ensureCameras(){ if(!Array.isArray(S.cameras)) S.cameras=[]; }
 var _tt = null; // toast timer
 let S = { roomName:'main', roomPassword:'main', adminToken:'', cameras:[], _user:'', _pass:'' };
 
@@ -629,7 +639,7 @@ async function adminLogin() {
     });
     const data = await res.json();
     if (!res.ok) { toast(data.error||'Server error'); return; }
-    S = { ...S, adminToken: data.adminToken, cameras: data.cameras||[], _user:user, _pass:pass };
+    S = { ...S, adminToken: data.adminToken, cameras: Array.isArray(data.cameras) ? data.cameras : [], _user:user, _pass:pass };
     S.roomName     = data.roomName     || 'main';
     S.roomPassword = data.roomPassword || 'main';
     showDashboard();
@@ -699,10 +709,25 @@ async function connectLiveKit() {
         const pSlot = cam ? cam.slot : null;
         playerCameOnline(uid, pName, pSlot, pTeam);
         peerConns.set(uid, { stream });
-        const vid = document.getElementById('vid-' + uid);
-        if (vid) { vid.srcObject = stream; }
-        const w = document.getElementById('wait-' + uid);
-        if (w) w.style.display = 'none';
+
+        // Team mode: share this stream with ALL teammates if team mode ON
+        const thisCam = S.cameras.find(function(c){ return c.uid === uid; });
+        if (thisCam && thisCam.team && teamModeSet.has(thisCam.team)) {
+          // Attach this stream to every player card in the team
+          S.cameras.filter(function(c){ return c.team === thisCam.team; }).forEach(function(tm) {
+            const tv = document.getElementById('vid-' + tm.uid);
+            if (tv) { tv.srcObject = stream; }
+            const tw = document.getElementById('wait-' + tm.uid);
+            if (tw) tw.style.display = 'none';
+            updateFeedStatus(tm.uid, 'live');
+          });
+        } else {
+          // Normal mode — attach only to this player
+          const vid = document.getElementById('vid-' + uid);
+          if (vid) { vid.srcObject = stream; }
+          const w = document.getElementById('wait-' + uid);
+          if (w) w.style.display = 'none';
+        }
         updateFeedStatus(uid, 'live');
         startAudioMeter(uid, stream);
         renderFeeds();
@@ -897,8 +922,8 @@ function renderFeeds(){
           </div>`;
       }
       grid.appendChild(card);
-      // re-attach stream from LiveKit if exists
-      const lkStream = lkClient.getStream(uid) || (peerConns.get(uid)||{}).stream;
+      // re-attach stream (team mode aware)
+      const lkStream = getEffectiveStream(uid) || (peerConns.get(uid)||{}).stream;
       if(lkStream){
         const vid=document.getElementById('vid-'+uid);
         if(vid&&!vid.srcObject){
@@ -1076,14 +1101,16 @@ function renderTeams(){
   if(!map.size){grid.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:30px;grid-column:1/-1">No teams yet.</div>';return;}
   grid.innerHTML='';
   map.forEach((players,teamName)=>{
-    const logo=getTeamLogo(teamName);
-    const liveCount=[...players].filter(p=>onlinePlayers.has(p.uid)).length;
+    const logo       = getTeamLogo(teamName);
+    const liveCount  = [...players].filter(p=>onlinePlayers.has(p.uid)).length;
+    const isTeamMode = teamModeSet.has(teamName);
+    // First live player uid for team mode
+    const livePlayer = players.find(p=>onlinePlayers.has(p.uid));
+
     const card=document.createElement('div'); card.className='team-card';
-    // Build logo HTML
     var logoHtml = logo
       ? '<img src="'+logo+'" alt="'+esc(teamName)+'" style="width:100%;height:100%;object-fit:contain;">'
       : '<span style="font-size:22px;opacity:.3">🏆</span>';
-    // Build players HTML
     var playersHtml = '';
     players.forEach(function(p){
       var dot = onlinePlayers.has(p.uid)
@@ -1092,6 +1119,13 @@ function renderTeams(){
       playersHtml += '<div class="tp-row"><span class="tp-name">'+esc(p.playerName)+'</span><span class="tp-uid">'+esc(p.uid)+'</span>'+dot+'</div>';
     });
     var liveTag = liveCount ? '<span class="tc-live">'+liveCount+' LIVE</span>' : '';
+
+    // Team mode toggle row
+    var switchOn  = isTeamMode ? 'on' : '';
+    var labelOn   = isTeamMode ? 'on' : '';
+    var modeLabel = isTeamMode ? 'TEAM MODE ON' : 'TEAM MODE';
+    var modeBadge = isTeamMode ? (livePlayer ? '→ '+esc(livePlayer.playerName) : 'NO LIVE PLAYER') : '';
+
     card.innerHTML =
       '<div class="tc-head">'+
         '<div class="tc-logo">'+logoHtml+'</div>'+
@@ -1101,9 +1135,46 @@ function renderTeams(){
         '</div>'+
         liveTag+
       '</div>'+
-      '<div class="tc-players">'+playersHtml+'</div>';
+      '<div class="tc-players">'+playersHtml+'</div>'+
+      '<div class="team-mode-toggle" onclick="toggleTeamMode(\''+esc(teamName)+'\')">'+
+        '<div class="tmt-switch '+switchOn+'"><div class="knob"></div></div>'+
+        '<span class="tmt-label '+labelOn+'">'+modeLabel+'</span>'+
+        '<span class="tmt-badge">'+modeBadge+'</span>'+
+      '</div>';
     grid.appendChild(card);
   });
+}
+
+// ── Toggle team mode for a team ───────────────────────────────────────────────
+function toggleTeamMode(teamName) {
+  if (teamModeSet.has(teamName)) {
+    teamModeSet.delete(teamName);
+    toast('Team mode OFF: '+teamName);
+  } else {
+    teamModeSet.add(teamName);
+    // Find first live player for this team
+    var teamPlayers = S.cameras.filter(function(c){ return c.team === teamName; });
+    var livePlayer  = teamPlayers.find(function(p){ return onlinePlayers.has(p.uid); });
+    toast('Team mode ON: '+teamName+(livePlayer?' → '+livePlayer.playerName:''));
+  }
+  saveTeamMode();
+  renderTeams();
+  renderFeeds(); // Update feeds tab to reflect team mode
+}
+
+// ── Get effective stream for a player (team mode aware) ───────────────────────
+function getEffectiveStream(uid) {
+  // Find which team this player belongs to
+  var cam = S.cameras.find(function(c){ return c.uid === uid; });
+  if (!cam || !cam.team) return lkClient.getStream(uid);
+
+  // If team mode ON — return stream of first live player in team
+  if (teamModeSet.has(cam.team)) {
+    var teamPlayers = S.cameras.filter(function(c){ return c.team === cam.team; });
+    var livePlayer  = teamPlayers.find(function(p){ return onlinePlayers.has(p.uid) && lkClient.getStream(p.uid); });
+    if (livePlayer) return lkClient.getStream(livePlayer.uid);
+  }
+  return lkClient.getStream(uid);
 }
 
 // ── Cameras Table ─────────────────────────────────────────────────────────────
@@ -1111,11 +1182,9 @@ async function addCam(){
   const name=v('cn'),uid=v('cu'),slot=parseInt(v('cs')),team=document.getElementById('ct').value;
   if(!name||!uid){toast('Name and UID required');return;}
   try{
-    const res=await fetch(API+'/api/room/camera/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomName:S.roomName,roomPassword:S.roomPassword,adminToken:S.adminToken,playerName:name,uid,slot,team})});
+    const res=await fetch(API+'/api/room/camera/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playerName:name,uid,slot,team})});
     const data=await res.json();
     if(!res.ok){toast(data.error);return;}
-    // Server returns {success:true} — add locally
-    ensureCameras();
     const ex=S.cameras.findIndex(c=>c.uid===uid);
     const cam={playerName:name,uid,slot,team};
     if(ex>=0)S.cameras[ex]=cam; else S.cameras.push(cam);
@@ -1128,7 +1197,7 @@ async function addCam(){
 
 async function removeCam(uid){
   if(uid && uid.dataset) uid = uid.dataset.uid; // support element or string
-  try{await fetch(`${API}/api/room/camera/${uid}?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`,{method:'DELETE'});}catch{}
+  try{await fetch(API+'/api/room/camera/'+uid,{method:'DELETE'});}catch{}
   ensureCameras(); S.cameras=S.cameras.filter(c=>c.uid!==uid);
   renderCameras();renderTeams();updateSelects();
   document.getElementById('d-reg').textContent=S.cameras.length;
@@ -1149,7 +1218,7 @@ function renderCameras(){
   const search=(document.getElementById('cam-search')?.value||'').toLowerCase();
   const teamF=document.getElementById('cam-team-filter')?.value||'';
   const statF=document.getElementById('cam-status-filter')?.value||'';
-  let cams=[...S.cameras];
+  let cams=[...(S.cameras||[])];
   if(search)cams=cams.filter(c=>c.playerName.toLowerCase().includes(search)||c.uid.includes(search));
   if(teamF)cams=cams.filter(c=>c.team===teamF);
   if(statF==='live')cams=cams.filter(c=>onlinePlayers.has(c.uid));
@@ -1314,14 +1383,10 @@ async function setSpect(slotNum) {
 
   // Refresh token in case server restarted
   if (!S.adminToken) await refreshAdminToken();
-  console.log('[SPECT SET] token:', S.adminToken ? S.adminToken.slice(0,8)+'...' : 'MISSING', 'room:', S.roomName);
   try {
     const res = await fetch(API + '/api/spect/set', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        roomName: S.roomName, roomPassword: S.roomPassword,
-        adminToken: S.adminToken, spectId: String(slotNum), uid: uid || null,
-      }),
+      body: JSON.stringify({ spectId: String(slotNum), uid: uid || null }),
     });
     const data = await res.json();
     if (!res.ok) { console.error('[SPECT SET] 403 error:', data); toast(data.error); }
@@ -1335,7 +1400,7 @@ async function setSpect(slotNum) {
 
 async function loadSpectStatus() {
   try {
-    const res  = await fetch(`${API}/api/spect/status?roomName=${enc(S.roomName)}&roomPassword=${enc(S.roomPassword)}&adminToken=${enc(S.adminToken)}`);
+    const res  = await fetch(API+'/api/spect/status');
     const data = await res.json();
     if (res.ok) {
       Object.entries(data.spectators).forEach(([sid, uid]) => {

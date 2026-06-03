@@ -153,6 +153,7 @@ header h1 span{color:var(--accent);}
       <option value="">— Loading teams... —</option>
     </select>
     <span id="team-badge" class="team-badge" style="display:none">0 players</span>
+    <span id="team-mode-badge" style="display:none;padding:4px 10px;border-radius:3px;font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(255,107,53,0.1);color:var(--accent2);border:1px solid rgba(255,107,53,0.25);">📹 TEAM MODE</span>
     <div class="conn-pill idle" id="conn-pill">
       <span class="dot"></span><span id="conn-text">IDLE</span>
     </div>
@@ -178,6 +179,8 @@ var audioAnalysers = new Map();
 var currentTeam   = '';
 var lkRoom        = null;
 var notifyWs      = null;
+// Sync team mode from localStorage (set by admin panel)
+var teamModeSet   = new Set(JSON.parse(localStorage.getItem('upthrust_team_mode')||'[]'));
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (async function boot(){
@@ -244,6 +247,13 @@ function onTeamChange() {
     badge.style.display = 'none';
   }
 
+  // Show team mode indicator
+  var tmb = document.getElementById('team-mode-badge');
+  if (tmb) {
+    teamModeSet = new Set(JSON.parse(localStorage.getItem('upthrust_team_mode')||'[]'));
+    if (currentTeam && teamModeSet.has(currentTeam)) tmb.style.display='inline-block';
+    else tmb.style.display='none';
+  }
   renderFeeds();
 }
 
@@ -361,17 +371,33 @@ async function connectLiveKit() {
   }
 }
 
-// ── Attach stream to card ─────────────────────────────────────────────────────
+// ── Attach stream to card (team mode aware) ──────────────────────────────────
 function attachStreamToCard(uid, stream) {
-  var vid  = document.getElementById('vid-' + uid);
-  var wait = document.getElementById('wait-' + uid);
-  var card = document.getElementById('card-' + uid);
-  if (vid && stream) {
-    vid.srcObject = stream;
-    vid.play().catch(function(){});
-    if (wait) wait.style.display = 'none';
-    if (card) card.classList.add('live');
+  // Reload team mode from localStorage (admin may have changed it)
+  teamModeSet = new Set(JSON.parse(localStorage.getItem('upthrust_team_mode')||'[]'));
+
+  var cam = allCameras.find(function(c){ return c.uid === uid; });
+  var targets = [uid]; // by default only this player
+
+  // If team mode ON — share stream with all players in this team
+  if (cam && cam.team && teamModeSet.has(cam.team)) {
+    targets = allCameras
+      .filter(function(c){ return c.team === cam.team; })
+      .map(function(c){ return c.uid; });
   }
+
+  targets.forEach(function(targetUid) {
+    var vid  = document.getElementById('vid-' + targetUid);
+    var wait = document.getElementById('wait-' + targetUid);
+    var card = document.getElementById('card-' + targetUid);
+    if (vid && stream) {
+      vid.srcObject = stream;
+      vid.play().catch(function(){});
+      if (wait) wait.style.display = 'none';
+      if (card) card.classList.add('live');
+      updateCardStatus(targetUid, true);
+    }
+  });
 }
 
 // ── Update card live status ───────────────────────────────────────────────────
