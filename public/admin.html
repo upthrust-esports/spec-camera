@@ -710,27 +710,33 @@ async function connectLiveKit() {
         const pTeam = cam ? cam.team : (team || '');
         const pSlot = cam ? cam.slot : null;
         playerCameOnline(uid, pName, pSlot, pTeam);
+        // If team mode ON — ensure feed cards exist for ALL team members
+        if (pTeam && teamModeSet.has(pTeam)) {
+          S.cameras.filter(c => c.team === pTeam).forEach(tm => {
+            ensureFeedCard(tm.uid, tm.playerName, tm.slot, tm.team);
+          });
+        }
         peerConns.set(uid, { stream });
 
         // Team mode: share this stream with ALL teammates if team mode ON
         const thisCam = S.cameras.find(function(c){ return c.uid === uid; });
+        var targets = [uid]; // default: only this player
         if (thisCam && thisCam.team && teamModeSet.has(thisCam.team)) {
-          // Attach this stream to every player card in the team
-          S.cameras.filter(function(c){ return c.team === thisCam.team; }).forEach(function(tm) {
-            const tv = document.getElementById('vid-' + tm.uid);
-            if (tv) { tv.srcObject = stream; }
-            const tw = document.getElementById('wait-' + tm.uid);
-            if (tw) tw.style.display = 'none';
-            updateFeedStatus(tm.uid, 'live');
-          });
-        } else {
-          // Normal mode — attach only to this player
-          const vid = document.getElementById('vid-' + uid);
-          if (vid) { vid.srcObject = stream; }
-          const w = document.getElementById('wait-' + uid);
-          if (w) w.style.display = 'none';
+          // Expand targets to all team members
+          targets = S.cameras
+            .filter(function(c){ return c.team === thisCam.team; })
+            .map(function(c){ return c.uid; });
+          console.log('[TEAM MODE] Sharing stream of', uid, 'to team:', thisCam.team, '→', targets);
         }
-        updateFeedStatus(uid, 'live');
+        targets.forEach(function(targetUid) {
+          var tv = document.getElementById('vid-' + targetUid);
+          if (tv) { tv.srcObject = stream; }
+          var tw = document.getElementById('wait-' + targetUid);
+          if (tw) tw.style.display = 'none';
+          updateFeedStatus(targetUid, 'live');
+          var fc = document.getElementById('feed-' + targetUid);
+          if (fc) fc.classList.add('live');
+        });
         startAudioMeter(uid, stream);
         renderFeeds();
         if (!S.cameras.find(c => c.uid === uid)) {
@@ -790,6 +796,8 @@ function disconnectPlayer(uid) {
 
 function startAudioMeter(uid,stream) {
   try {
+    // Guard: need at least one audio track
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return;
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
     const src=ctx.createMediaStreamSource(stream);
     const an=ctx.createAnalyser(); an.fftSize=256; an.smoothingTimeConstant=0.6;
@@ -1138,7 +1146,7 @@ function renderTeams(){
         liveTag+
       '</div>'+
       '<div class="tc-players">'+playersHtml+'</div>'+
-      '<div class="team-mode-toggle" onclick="toggleTeamMode(\''+esc(teamName)+'\')">'+
+      '<div class="team-mode-toggle" id="tmt-'+esc(teamName)+'" onclick="toggleTeamMode(this.dataset.team)" data-team="'+esc(teamName)+'">'+
         '<div class="tmt-switch '+switchOn+'"><div class="knob"></div></div>'+
         '<span class="tmt-label '+labelOn+'">'+modeLabel+'</span>'+
         '<span class="tmt-badge">'+modeBadge+'</span>'+
@@ -1149,19 +1157,56 @@ function renderTeams(){
 
 // ── Toggle team mode for a team ───────────────────────────────────────────────
 function toggleTeamMode(teamName) {
+  if (!teamName) return;
+
   if (teamModeSet.has(teamName)) {
+    // ── Turn OFF ──────────────────────────────────────────────────────────
     teamModeSet.delete(teamName);
-    toast('Team mode OFF: '+teamName);
+    saveTeamMode();
+    // Restore individual streams for each team player
+    var teamPlayers = (S.cameras||[]).filter(function(c){ return c.team === teamName; });
+    teamPlayers.forEach(function(p) {
+      var ownStream = lkClient.getStream(p.uid) || (peerConns.get(p.uid)||{}).stream;
+      var vid  = document.getElementById('vid-' + p.uid);
+      var wait = document.getElementById('wait-' + p.uid);
+      if (vid) {
+        vid.srcObject = ownStream || null;
+        if (!ownStream && wait) wait.style.display = 'flex';
+      }
+      updateFeedStatus(p.uid, !!ownStream && onlinePlayers.has(p.uid) ? 'live' : 'offline');
+    });
+    toast('📷 Team mode OFF: ' + teamName);
+
   } else {
+    // ── Turn ON ───────────────────────────────────────────────────────────
     teamModeSet.add(teamName);
-    // Find first live player for this team
-    var teamPlayers = S.cameras.filter(function(c){ return c.team === teamName; });
-    var livePlayer  = teamPlayers.find(function(p){ return onlinePlayers.has(p.uid); });
-    toast('Team mode ON: '+teamName+(livePlayer?' → '+livePlayer.playerName:''));
+    saveTeamMode();
+    // Find first live player stream and share with all teammates
+    var teamPlayers2 = (S.cameras||[]).filter(function(c){ return c.team === teamName; });
+    var livePlayer   = null;
+    var liveStream   = null;
+    for (var i = 0; i < teamPlayers2.length; i++) {
+      var p2 = teamPlayers2[i];
+      var s  = lkClient.getStream(p2.uid) || (peerConns.get(p2.uid)||{}).stream;
+      if (s && onlinePlayers.has(p2.uid)) { livePlayer = p2; liveStream = s; break; }
+    }
+    if (liveStream) {
+      // Share this stream to ALL team feed cards
+      teamPlayers2.forEach(function(p3) {
+        var vid  = document.getElementById('vid-' + p3.uid);
+        var wait = document.getElementById('wait-' + p3.uid);
+        if (vid) { vid.srcObject = liveStream; }
+        if (wait) wait.style.display = 'none';
+        updateFeedStatus(p3.uid, 'live');
+        var card = document.getElementById('feed-' + p3.uid);
+        if (card) card.classList.add('live');
+      });
+      toast('📹 Team mode ON: ' + teamName + ' → ' + livePlayer.playerName);
+    } else {
+      toast('📹 Team mode ON: ' + teamName + ' (waiting for any player to join)');
+    }
   }
-  saveTeamMode();
   renderTeams();
-  renderFeeds(); // Update feeds tab to reflect team mode
 }
 
 // ── Get effective stream for a player (team mode aware) ───────────────────────
