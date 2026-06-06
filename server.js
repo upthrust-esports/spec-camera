@@ -296,15 +296,19 @@ async function pollFFOnce() {
       'Client-ID': ffClientId,
     });
     if (!resp) return;
+    console.log('[FF POLL] resp bytes:', resp ? resp.length : 'NULL');
 
     const data       = JSON.parse(resp);
     const matchStats = data?.match_stats?.[0];
     if (!matchStats) return;
+    console.log('[FF POLL] match_stats found, match_id:', matchStats?.match?.match_id);
 
     const extra       = matchStats?.match?.match_stats_extra || {};
     const spectorInfo = extra.spector_info || [];
 
-    if (!spectorInfo.length) return;
+    if (!spectorInfo.length) { console.log('[FF POLL] empty spector_info'); return; }
+    console.log('[FF POLL] spector_info count:', spectorInfo.length);
+    console.log('[FF POLL] spector_info:', JSON.stringify(spectorInfo));
 
     // Build player lookup from all teams: account_id → { playerName, team }
     const playerLookup = {};
@@ -319,13 +323,17 @@ async function pollFFOnce() {
 
     // For each configured observer slot, find who they are watching
     for (const obs of ffSpectObservers) {
-      const slotKey  = String(obs.slot);
+      const slotKey   = String(obs.slot);
       const spectorId = String(obs.spectorId || obs.observerUid || '');
-      if (!spectorId) continue;
+      console.log('[FF POLL] Slot', slotKey, '— looking for spectorId:', spectorId);
+      if (!spectorId) { console.log('[FF POLL] Slot', slotKey, '— no spectorId configured'); continue; }
 
       // Find the spector_info entry matching this spectorId
+      const allIds = spectorInfo.map(s => String(s.spector_id));
+      console.log('[FF POLL] Available spector_ids:', allIds);
       const entry = spectorInfo.find(s => String(s.spector_id) === spectorId);
-      if (!entry) continue;
+      if (!entry) { console.log('[FF POLL] Slot', slotKey, '— spectorId', spectorId, 'NOT found in', allIds); continue; }
+      console.log('[FF POLL] Slot', slotKey, '— found entry:', JSON.stringify(entry));
 
       const observerId = String(entry.observer_id || '0');
       if (!observerId || observerId === '0') continue;
@@ -369,16 +377,33 @@ app.get('/api/spect/raw', async (req, res) => {
   if (!mid) return res.status(400).json({ error: 'matchId required' });
 
   try {
-    const url  = `${FF_API_URL}?matchid=${mid}`;
+    const url = `${FF_API_URL}?matchid=${mid}`;
+    console.log('[FF RAW] Fetching:', url, '| Client-ID:', cid);
+
     const resp = await fetchURL(url, { 'accept': 'application/json', 'Client-ID': cid });
-    if (!resp) return res.status(503).json({ error: 'FF API unreachable' });
+    console.log('[FF RAW] Response:', resp ? resp.length + ' bytes' : 'NULL');
+    if (!resp) return res.status(503).json({ error: 'FF API unreachable — null response' });
 
-    const data       = JSON.parse(resp);
+    // Show first 200 chars of response for debugging
+    console.log('[FF RAW] Preview:', resp.slice(0, 200));
+
+    let data;
+    try { data = JSON.parse(resp); }
+    catch(pe) { return res.status(500).json({ error: 'JSON parse error: ' + pe.message, preview: resp.slice(0,500) }); }
+
+    console.log('[FF RAW] Top-level keys:', Object.keys(data));
+
     const matchStats = data?.match_stats?.[0];
-    if (!matchStats) return res.json({ error: 'No match_stats', raw: data });
+    if (!matchStats) {
+      console.log('[FF RAW] No match_stats found');
+      return res.json({ error: 'No match_stats in response', keys: Object.keys(data) });
+    }
 
+    console.log('[FF RAW] match_id:', matchStats?.match?.match_id);
     const extra       = matchStats?.match?.match_stats_extra || {};
     const spectorInfo = extra.spector_info || [];
+    console.log('[FF RAW] extra keys:', Object.keys(extra));
+    console.log('[FF RAW] spector_info:', JSON.stringify(spectorInfo));
 
     // Build player lookup
     const playerLookup = {};
@@ -388,27 +413,30 @@ app.get('/api/spect/raw', async (req, res) => {
       });
     });
 
-    // Enrich spector info — show ALL spectors including idle (observer_id=0)
+    // Enrich — show ALL spectors including idle
     const enriched = spectorInfo.map(s => {
-      const obsId   = String(s.observer_id || '0');
-      const isIdle  = !obsId || obsId === '0';
-      const lookup  = !isIdle ? (playerLookup[obsId] || {}) : {};
+      const obsId  = String(s.observer_id || '0');
+      const isIdle = !obsId || obsId === '0';
+      const lk     = !isIdle ? (playerLookup[obsId] || {}) : {};
       return {
         spector_id:    s.spector_id,
         observer_id:   obsId,
-        observer_name: s.observer_name || lookup.nickname || (isIdle ? '(idle — not watching)' : '?'),
-        observer_team: s.observer_team_name || lookup.team || (isIdle ? '' : '?'),
+        observer_name: s.observer_name || lk.nickname || (isIdle ? '(idle)' : '?'),
+        observer_team: s.observer_team_name || lk.team || '',
         is_idle:       isIdle,
       };
     });
 
+    console.log('[FF RAW] Enriched result:', JSON.stringify(enriched));
+
     res.json({
-      match_id:       mid,
-      spector_count:  spectorInfo.length,
-      spectors:       enriched,
-      total_teams:    matchStats.team_stats?.length || 0,
+      match_id:      mid,
+      spector_count: spectorInfo.length,
+      spectors:      enriched,
+      total_teams:   matchStats.team_stats?.length || 0,
     });
   } catch(e) {
+    console.error('[FF RAW] Error:', e.message, e.stack);
     res.status(500).json({ error: e.message });
   }
 });
