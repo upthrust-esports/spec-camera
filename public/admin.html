@@ -739,22 +739,36 @@ async function connectLiveKit() {
             .map(function(c){ return c.uid; });
           console.log('[TEAM MODE] Sharing stream of', uid, 'to team:', thisCam.team, '→', targets);
         }
+        // ── Attach stream directly — NO full renderFeeds() to avoid wiping other videos
         targets.forEach(function(targetUid) {
-          var tv = document.getElementById('vid-' + targetUid);
-          if (tv) { tv.srcObject = stream; }
-          var tw = document.getElementById('wait-' + targetUid);
+          // Ensure feed card exists for this player first
+          const tCam = S.cameras.find(function(c){ return c.uid === targetUid; });
+          if (tCam) ensureFeedCard(targetUid, tCam.playerName, tCam.slot, tCam.team);
+
+          // Attach stream directly to existing video element
+          const tv = document.getElementById('vid-' + targetUid);
+          if (tv) {
+            // Only set if different to avoid flicker
+            if (tv.srcObject !== stream) tv.srcObject = stream;
+          }
+          const tw = document.getElementById('wait-' + targetUid);
           if (tw) tw.style.display = 'none';
           updateFeedStatus(targetUid, 'live');
-          var fc = document.getElementById('feed-' + targetUid);
+          const fc = document.getElementById('feed-' + targetUid);
           if (fc) fc.classList.add('live');
         });
+
         startAudioMeter(uid, stream);
-        renderFeeds();
+
+        // Only add to cameras list if new — then render once
         if (!S.cameras.find(c => c.uid === uid)) {
           S.cameras.push({ uid, playerName: pName, team: pTeam, slot: pSlot });
           renderCameras(); renderTeams(); updateSelects();
           document.getElementById('d-reg').textContent = S.cameras.length;
         }
+
+        // Update online count only — don't rebuild the entire feed grid
+        document.getElementById('d-online').textContent = onlinePlayers.size;
       },
       // onLeft — camera disconnected
       function(uid) {
@@ -840,19 +854,25 @@ function playerCameOnline(uid,playerName,slot,team){
   onlinePlayers.set(uid,{playerName,slot,team});
   renderOnlineList(); renderCameras(); renderTeams();
   ensureFeedCard(uid,playerName,slot,team);
+  // Update status badge on existing card without full rebuild
+  updateFeedStatus(uid,'live');
+  const fc=document.getElementById('feed-'+uid);
+  if(fc) fc.classList.add('live');
   document.getElementById('d-online').textContent=onlinePlayers.size;
 }
 function playerWentOffline(uid){
   onlinePlayers.delete(uid);
-  peerConns.delete(uid); // clear from legacy map too
+  peerConns.delete(uid);
   stopAudioMeter(uid);
-  // Clear video and show photo fallback
-  var vid = document.getElementById('vid-'+uid);
-  if(vid) vid.srcObject = null;
-  var wait = document.getElementById('wait-'+uid);
+  // Update card in-place — no full rebuild
+  const vid  = document.getElementById('vid-'+uid);
+  if(vid) { vid.srcObject = null; }
+  const wait = document.getElementById('wait-'+uid);
   if(wait) wait.style.display = 'flex';
-  updateFeedStatus(uid, 'offline');
-  renderOnlineList(); renderCameras(); renderTeams(); renderFeeds();
+  const fc = document.getElementById('feed-'+uid);
+  if(fc) fc.classList.remove('live');
+  updateFeedStatus(uid,'offline');
+  renderOnlineList(); renderCameras(); renderTeams();
   document.getElementById('d-online').textContent=onlinePlayers.size;
 }
 
@@ -861,7 +881,66 @@ const feedCardsData = new Map(); // uid -> { playerName, slot, team }
 
 function ensureFeedCard(uid,playerName,slot,team){
   feedCardsData.set(uid,{playerName,slot,team});
-  renderFeeds();
+  // Only add the card to DOM if it doesn't exist yet — no full rebuild
+  if(!document.getElementById('feed-'+uid)){
+    addSingleFeedCard(uid,playerName,slot,team);
+  }
+}
+
+// Add a single feed card without rebuilding the entire grid
+function addSingleFeedCard(uid,playerName,slot,team){
+  const grid=document.getElementById('feeds-grid');
+  if(!grid) return;
+  // Remove the empty-state div if present
+  const empty=grid.querySelector('.no-feeds');
+  if(empty) empty.remove();
+
+  if(document.getElementById('feed-'+uid)) return; // already exists
+
+  const logo=team&&getTeamLogo(team);
+  const logoHtml=logo?`<img class="feed-tlogo" src="${logo}">`:`<div class="feed-tlogo-ph">🏆</div>`;
+  const photo=getPlayerPhoto(uid,playerName);
+  const isLive=onlinePlayers.has(uid);
+
+  const card=document.createElement('div');
+  card.className='feed-card'+(isLive?' live':'');
+  card.id='feed-'+uid;
+  card.innerHTML=`
+    <div class="feed-header">
+      ${logoHtml}
+      <div class="feed-info">
+        <div class="feed-name">${esc(playerName)}</div>
+        <div class="feed-team">${team?esc(team):''}</div>
+      </div>
+      <div class="feed-meta">
+        <span class="${isLive?'live-badge':'offline-badge'}" id="fstat-${uid}">${isLive?'<span class="d"></span>LIVE':'WAITING'}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">S${slot||'?'}</span>
+        <button class="btn-disc" onclick="disconnectPlayer('${uid}')" title="Stop camera">✕ CAM</button>
+      </div>
+    </div>
+    <div class="feed-video-wrap">
+      <video id="vid-${uid}" autoplay playsinline></video>
+      <div class="feed-waiting" id="wait-${uid}" style="${isLive?'display:none':''}">
+        ${photo?`<img src="${photo}" style="width:100%;height:100%;object-fit:cover;opacity:0.6;position:absolute;inset:0;">`:'<div class="icon">📡</div><p>Waiting…</p>'}
+      </div>
+    </div>
+    <div class="feed-footer">
+      <span class="feed-uid">${esc(uid)}</span>
+      <div class="audio-wrap">
+        <span class="audio-label">MIC</span>
+        <div class="audio-bars">${[0,1,2,3,4,5,6,7].map(i=>`<div class="audio-bar" id="ab${i}-${uid}" style="height:2px"></div>`).join('')}</div>
+      </div>
+    </div>`;
+  grid.appendChild(card);
+
+  // Attach stream if already available
+  const stream=getEffectiveStream(uid)||(peerConns.get(uid)||{}).stream;
+  if(stream){
+    const vid=document.getElementById('vid-'+uid);
+    if(vid){ vid.srcObject=stream; }
+    const wait=document.getElementById('wait-'+uid);
+    if(wait) wait.style.display='none';
+  }
 }
 function removeFeedCard(uid){
   feedCardsData.delete(uid);
@@ -875,6 +954,14 @@ function renderFeeds(){
   const search=(document.getElementById('feed-search')?.value||'').toLowerCase();
   const teamF=document.getElementById('feed-team-filter')?.value||'';
   const statF=document.getElementById('feed-status-filter')?.value||'';
+
+  // Snapshot all current video srcObjects BEFORE any DOM changes
+  // This prevents flicker when cards are moved/recreated
+  const streamSnapshot = new Map();
+  feedCardsData.forEach(function(d, uid) {
+    const v = document.getElementById('vid-' + uid);
+    if (v && v.srcObject) streamSnapshot.set(uid, v.srcObject);
+  });
 
   // filter
   let cards=[...feedCardsData.entries()];
@@ -943,11 +1030,12 @@ function renderFeeds(){
           </div>`;
       }
       grid.appendChild(card);
-      // re-attach stream (team mode aware)
-      const lkStream = getEffectiveStream(uid) || (peerConns.get(uid)||{}).stream;
+      // re-attach stream — prefer snapshot (active stream) over lookup to avoid flicker
+      const snapStream = streamSnapshot.get(uid);
+      const lkStream   = snapStream || getEffectiveStream(uid) || (peerConns.get(uid)||{}).stream;
       if(lkStream){
         const vid=document.getElementById('vid-'+uid);
-        if(vid&&!vid.srcObject){
+        if(vid && vid.srcObject !== lkStream){
           vid.srcObject=lkStream;
           const w=document.getElementById('wait-'+uid);if(w)w.style.display='none';
         }
@@ -1543,7 +1631,8 @@ async function fetchSpectorIds() {
         '<span style="color:' + idColor + ';min-width:130px;font-size:10px">' + esc(String(s.spector_id)) + '</span>' +
         '<span style="color:' + nameColor + ';flex:1;font-size:10px">' + nameStr + teamStr + '</span>' +
         [1,2,3,4,5,6].map(function(slot) {
-          return '<button onclick="document.getElementById(\'obs-uid-' + slot + '\').value=\'' + esc(String(s.spector_id)) + '\';toast(\'Spect ' + slot + ' → ID ' + esc(String(s.spector_id)) + '\')" ' +
+          var spectorId = esc(String(s.spector_id));
+          return '<button onclick="var el=document.getElementById(\'obs-uid-' + slot + '\'); if(el){ el.value = \'" + spectorId + "\'; el.dispatchEvent(new Event(\'change\')); }" ' +
             'style="background:rgba(0,229,255,0.08);color:var(--accent);border:1px solid rgba(0,229,255,0.2);border-radius:3px;padding:2px 6px;font-size:8px;cursor:pointer;font-family:\'Rajdhani\',sans-serif;font-weight:700;flex-shrink:0;">S' + slot + '</button>';
         }).join('') +
       '</div>';
