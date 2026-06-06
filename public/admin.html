@@ -452,32 +452,43 @@ tr:hover td{background:rgba(0,229,255,0.015);}
             </div>
           </div>
           <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Spectator Observer UIDs — enter the FF account UID of each spectator PC (max 6)</div>
+          <div style="font-size:10px;color:var(--yellow);background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:4px;padding:8px 12px;margin-bottom:10px;line-height:1.6;">
+            💡 <strong>Spector ID</strong> = the spectator PC's ID inside the FF match (NOT the player's UID).<br/>
+            Find spector IDs: enter Match ID → click <strong>🔍 FETCH SPECTOR IDs</strong> button below.
+          </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
             <div style="display:flex;flex-direction:column;gap:3px;">
-              <div style="font-size:9px;color:var(--muted);">SPECT 1 Observer UID</div>
-              <input id="obs-uid-1" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+              <div style="font-size:9px;color:var(--muted);">SPECT 1 — Spector ID</div>
+              <input id="obs-uid-1" class="search-box" style="width:100%;font-size:11px" placeholder="Spector ID from API"/>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              <div style="font-size:9px;color:var(--muted);">SPECT 2 Observer UID</div>
-              <input id="obs-uid-2" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+              <div style="font-size:9px;color:var(--muted);">SPECT 2 — Spector ID</div>
+              <input id="obs-uid-2" class="search-box" style="width:100%;font-size:11px" placeholder="Spector ID from API"/>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              <div style="font-size:9px;color:var(--muted);">SPECT 3 Observer UID</div>
-              <input id="obs-uid-3" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+              <div style="font-size:9px;color:var(--muted);">SPECT 3 — Spector ID</div>
+              <input id="obs-uid-3" class="search-box" style="width:100%;font-size:11px" placeholder="Spector ID from API"/>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              <div style="font-size:9px;color:var(--muted);">SPECT 4 Observer UID</div>
-              <input id="obs-uid-4" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+              <div style="font-size:9px;color:var(--muted);">SPECT 4 — Spector ID</div>
+              <input id="obs-uid-4" class="search-box" style="width:100%;font-size:11px" placeholder="Spector ID from API"/>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              <div style="font-size:9px;color:var(--muted);">SPECT 5 Observer UID</div>
-              <input id="obs-uid-5" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+              <div style="font-size:9px;color:var(--muted);">SPECT 5 — Spector ID</div>
+              <input id="obs-uid-5" class="search-box" style="width:100%;font-size:11px" placeholder="Spector ID from API"/>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              <div style="font-size:9px;color:var(--muted);">SPECT 6 Observer UID</div>
-              <input id="obs-uid-6" class="search-box" style="width:100%;font-size:11px" placeholder="FF Observer UID"/>
+              <div style="font-size:9px;color:var(--muted);">SPECT 6 — Spector ID</div>
+              <input id="obs-uid-6" class="search-box" style="width:100%;font-size:11px" placeholder="Spector ID from API"/>
             </div>
           </div>
+          <!-- Fetch spector IDs button -->
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn-ghost-s" onclick="fetchSpectorIds()" style="padding:7px 16px;font-size:11px;">🔍 FETCH SPECTOR IDs</button>
+            <span id="spector-fetch-status" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);align-self:center;"></span>
+          </div>
+          <!-- Spector results table -->
+          <div id="spector-results" style="display:none;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;font-size:10px;max-height:160px;overflow-y:auto;"></div>
           <div style="display:flex;gap:8px;">
             <button class="btn-green" onclick="startFFPolling()" style="padding:8px 20px;font-size:11px;">▶ START AUTO TRACKING</button>
             <button class="btn-ghost-s" onclick="stopFFPolling()" style="padding:8px 16px;font-size:11px;">■ STOP</button>
@@ -1487,6 +1498,59 @@ function patchWsForSpect() { return;
   };
 }
 
+// ── Fetch Spector IDs from FF API ────────────────────────────────────────────
+async function fetchSpectorIds() {
+  const matchId  = v('ff-match-id');
+  const clientId = v('ff-client-id');
+  if (!matchId) { toast('Enter Match ID first'); return; }
+
+  const statusEl  = document.getElementById('spector-fetch-status');
+  const resultsEl = document.getElementById('spector-results');
+  statusEl.textContent = '⏳ Fetching...';
+  statusEl.style.color = 'var(--yellow)';
+
+  try {
+    const url  = '/api/spect/raw?matchId=' + encodeURIComponent(matchId) + '&clientId=' + encodeURIComponent(clientId);
+    const res  = await fetch(url);
+    const data = await res.json();
+
+    if (data.error) {
+      statusEl.textContent = '❌ ' + data.error;
+      statusEl.style.color = 'var(--red)';
+      return;
+    }
+
+    const spectors = data.spectors || [];
+    statusEl.textContent = '✅ Found ' + spectors.length + ' spectors';
+    statusEl.style.color = 'var(--green)';
+
+    if (!spectors.length) {
+      resultsEl.style.display = 'block';
+      resultsEl.innerHTML = '<span style="color:var(--muted)">No spectors found. Match may not be live yet.</span>';
+      return;
+    }
+
+    // Show results with copy buttons
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = spectors.map(function(s, i) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid rgba(30,47,69,0.3);">' +
+        '<span style="color:var(--accent);min-width:80px">ID: ' + esc(String(s.spector_id)) + '</span>' +
+        '<span style="color:var(--text);flex:1">' + esc(s.observer_name || '?') + ' — ' + esc(s.observer_team || '?') + '</span>' +
+        [1,2,3,4,5,6].map(function(slot) {
+          return "<button onclick=\"document.getElementById('obs-uid-" + slot + "').value='" + esc(String(s.spector_id)) + "'\" " +
+            "style=\"background:rgba(0,229,255,0.08);color:var(--accent);border:1px solid rgba(0,229,255,0.2);border-radius:3px;padding:2px 6px;font-size:8px;cursor:pointer;font-family:Rajdhani,sans-serif;font-weight:700;\">S" + slot + "</button>";
+        }).join('') +
+      '</div>';
+    }).join('');
+
+    toast('✅ ' + spectors.length + ' spectors found — click S1-S6 to assign');
+  } catch(e) {
+    statusEl.textContent = '❌ ' + e.message;
+    statusEl.style.color = 'var(--red)';
+    toast('❌ Fetch error: ' + e.message);
+  }
+}
+
 async function startFFPolling() {
   const matchId   = v('ff-match-id');
   const clientId  = v('ff-client-id');
@@ -1494,10 +1558,10 @@ async function startFFPolling() {
 
   const observers = [];
   for (let i = 1; i <= 6; i++) {
-    const uid = document.getElementById('obs-uid-' + i)?.value.trim();
-    if (uid) observers.push({ slot: i, observerUid: uid });
+    const spectorId = document.getElementById('obs-uid-' + i)?.value.trim();
+    if (spectorId) observers.push({ slot: i, spectorId });
   }
-  if (!observers.length) { toast('Enter at least 1 Observer UID'); return; }
+  if (!observers.length) { toast('Enter at least 1 Spector ID'); return; }
 
   // Save to localStorage
   localStorage.setItem('upthrust_ff_config', JSON.stringify({ matchId, clientId, observers }));
@@ -1545,7 +1609,7 @@ async function loadFFConfig() {
       if (cfg.clientId) document.getElementById('ff-client-id').value = cfg.clientId;
       cfg.observers?.forEach(o => {
         const el = document.getElementById('obs-uid-' + o.slot);
-        if (el) el.value = o.observerUid;
+        if (el) el.value = o.spectorId || o.observerUid || '';
       });
     } catch {}
   }
