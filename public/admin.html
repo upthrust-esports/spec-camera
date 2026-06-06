@@ -1530,15 +1530,21 @@ async function fetchSpectorIds() {
       return;
     }
 
-    // Show results with copy buttons
+    // Show results with copy buttons — including idle spectors
     resultsEl.style.display = 'block';
-    resultsEl.innerHTML = spectors.map(function(s, i) {
-      return '<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid rgba(30,47,69,0.3);">' +
-        '<span style="color:var(--accent);min-width:80px">ID: ' + esc(String(s.spector_id)) + '</span>' +
-        '<span style="color:var(--text);flex:1">' + esc(s.observer_name || '?') + ' — ' + esc(s.observer_team || '?') + '</span>' +
+    resultsEl.innerHTML = '<div style="font-size:9px;color:var(--muted);margin-bottom:6px;letter-spacing:1px;">SPECTOR ID → click S1-S6 to assign to a slot</div>' +
+    spectors.map(function(s) {
+      var idle     = s.is_idle;
+      var nameStr  = idle ? '(idle — not watching anyone)' : esc(s.observer_name || '?');
+      var teamStr  = idle ? '' : (' — ' + esc(s.observer_team || ''));
+      var nameColor = idle ? 'var(--muted)' : 'var(--text)';
+      var idColor   = idle ? 'rgba(0,229,255,0.5)' : 'var(--accent)';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(30,47,69,0.3);">' +
+        '<span style="color:' + idColor + ';min-width:130px;font-size:10px">' + esc(String(s.spector_id)) + '</span>' +
+        '<span style="color:' + nameColor + ';flex:1;font-size:10px">' + nameStr + teamStr + '</span>' +
         [1,2,3,4,5,6].map(function(slot) {
-          return "<button onclick=\"document.getElementById('obs-uid-" + slot + "').value='" + esc(String(s.spector_id)) + "'\" " +
-            "style=\"background:rgba(0,229,255,0.08);color:var(--accent);border:1px solid rgba(0,229,255,0.2);border-radius:3px;padding:2px 6px;font-size:8px;cursor:pointer;font-family:Rajdhani,sans-serif;font-weight:700;\">S" + slot + "</button>";
+          return '<button onclick="document.getElementById('obs-uid-' + slot + '').value='' + esc(String(s.spector_id)) + '';toast('Spect ' + slot + ' → ID ' + esc(String(s.spector_id)) + '')" ' +
+            'style="background:rgba(0,229,255,0.08);color:var(--accent);border:1px solid rgba(0,229,255,0.2);border-radius:3px;padding:2px 6px;font-size:8px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:700;flex-shrink:0;">S' + slot + '</button>';
         }).join('') +
       '</div>';
     }).join('');

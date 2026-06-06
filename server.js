@@ -331,12 +331,14 @@ async function pollFFOnce() {
       if (!observerId || observerId === '0') continue;
 
       // Look up who they are watching
-      // First try our registered cameras, then the match player lookup
-      const cam    = cameras.get(observerId);
-      const lookup = playerLookup[observerId];
-      if (!cam && !lookup) continue;
-
-      const playerName = cam?.playerName || lookup?.playerName || observerId;
+      // observer_id IS the player's FF account_id
+      // cameras map uses player's uid (should be same as account_id)
+      const cam        = cameras.get(observerId);
+      const lookup     = playerLookup[observerId];
+      // Don't skip if player not in cameras — they might not be registered
+      // Still broadcast with whatever name we have
+      const playerName = cam?.playerName || lookup?.playerName
+        || entry.observer_name || observerId;
 
       // Only update + broadcast if changed
       if (ffLastSpect[slotKey] !== observerId) {
@@ -386,13 +388,19 @@ app.get('/api/spect/raw', async (req, res) => {
       });
     });
 
-    // Enrich spector info
-    const enriched = spectorInfo.map(s => ({
-      spector_id:    s.spector_id,
-      observer_id:   s.observer_id,
-      observer_name: s.observer_name || playerLookup[String(s.observer_id)]?.nickname || '?',
-      observer_team: s.observer_team_name || playerLookup[String(s.observer_id)]?.team || '?',
-    }));
+    // Enrich spector info — show ALL spectors including idle (observer_id=0)
+    const enriched = spectorInfo.map(s => {
+      const obsId   = String(s.observer_id || '0');
+      const isIdle  = !obsId || obsId === '0';
+      const lookup  = !isIdle ? (playerLookup[obsId] || {}) : {};
+      return {
+        spector_id:    s.spector_id,
+        observer_id:   obsId,
+        observer_name: s.observer_name || lookup.nickname || (isIdle ? '(idle — not watching)' : '?'),
+        observer_team: s.observer_team_name || lookup.team || (isIdle ? '' : '?'),
+        is_idle:       isIdle,
+      };
+    });
 
     res.json({
       match_id:       mid,
